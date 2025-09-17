@@ -66,7 +66,7 @@ export default function LoginPage() {
 			<div className="w-full max-w-md">
 				{/* Header */}
 				<div className="text-center mb-8">
-					<Link href="/" className="inline-block mb-6">
+					<Link href="https://quaxt.co.ke" className="inline-block mb-6">
 						<h1 className="text-2xl font-semibold text-slate-900">Quaxt</h1>
 					</Link>
 					<h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
