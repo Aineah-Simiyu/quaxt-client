@@ -133,7 +133,7 @@ export default function Sidebar({ onClose }) {
               <RoleIcon className="h-4 w-4 text-white" />
             </div>
             <div>
-              <span className="text-lg font-semibold text-slate-900">Evalura</span>
+              <span className="text-lg font-semibold text-slate-900">Quaxt</span>
               <p className="text-sm text-slate-600 font-medium">
                 {roleInfo.label}
               </p>

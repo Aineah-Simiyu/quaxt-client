@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
 				<div className="max-w-7xl mx-auto px-6 py-4">
 					<div className="flex items-center justify-between">
 						<Link href="/" className="text-xl font-semibold text-slate-900">
-							Evalura
+							Quaxt
 						</Link>
 						<div className="text-sm text-slate-600">
 							Remember your password?{" "}

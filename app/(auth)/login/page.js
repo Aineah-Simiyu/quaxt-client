@@ -67,7 +67,7 @@ export default function LoginPage() {
 				{/* Header */}
 				<div className="text-center mb-8">
 					<Link href="/" className="inline-block mb-6">
-						<h1 className="text-2xl font-semibold text-slate-900">Evalura</h1>
+						<h1 className="text-2xl font-semibold text-slate-900">Quaxt</h1>
 					</Link>
 					<h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
 						Welcome Back
@@ -156,7 +156,7 @@ export default function LoginPage() {
 				{/* Footer */}
 				<div className="text-center mt-8">
 					<p className="text-sm text-slate-600">
-						New to Evalura?{' '}
+						New to Quaxt?{' '}
 						<Link href="/register" className="text-slate-900 hover:text-slate-700 font-medium transition-colors">
 							Create an account
 						</Link>

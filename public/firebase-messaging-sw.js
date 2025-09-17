@@ -7,9 +7,9 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compa
 
 const firebaseConfig = {
 	apiKey: "AIzaSyCBX1SypGgBg3IHeM1CFyuKxVp3NEAeZEw",
-	authDomain: "evalura-aac1f.firebaseapp.com",
-	projectId: "evalura-aac1f",
-	storageBucket: "evalura-aac1f.appspot.com",
+	authDomain: "Quaxt-aac1f.firebaseapp.com",
+	projectId: "Quaxt-aac1f",
+	storageBucket: "Quaxt-aac1f.appspot.com",
 	messagingSenderId: "835262431880",
 	appId: "1:835262431880:web:89929693e46680cd78153d",
 	measurementId: "G-FC6NTNW00W"

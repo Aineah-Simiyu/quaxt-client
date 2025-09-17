@@ -49,7 +49,7 @@ export default function VerifyEmailPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
               <Link href="/" className="text-xl font-semibold text-slate-900">
-                Evalura
+                Quaxt
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -97,7 +97,7 @@ export default function VerifyEmailPage() {
                   </h1>
                   <p className="text-lg text-slate-600 leading-relaxed max-w-md mx-auto">
                     {status === 'verifying' && 'Please wait while we verify your email address...'}
-                    {status === 'success' && 'Welcome to Evalura! Your account is now active and ready to use.'}
+                    {status === 'success' && 'Welcome to Quaxt! Your account is now active and ready to use.'}
                     {status === 'error' && 'We encountered an issue while verifying your email address.'}
                   </p>
                 </div>
@@ -163,7 +163,7 @@ export default function VerifyEmailPage() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="text-center">
             <p className="text-sm text-slate-500">
-              © {new Date().getFullYear()} Evalura. All rights reserved.
+              © {new Date().getFullYear()} Quaxt. All rights reserved.
             </p>
           </div>
         </div>
