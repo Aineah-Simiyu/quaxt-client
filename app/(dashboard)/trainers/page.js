@@ -549,7 +549,7 @@ function TrainersPage() {
         <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
           <DialogContent className="bg-white border border-slate-200 max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-lg font-semibold text-slate-900">Manage Assignments</DialogTitle>
+              <DialogTitle className="text-lg font-semibold text-slate-900">Manage Trainer</DialogTitle>
               <DialogDescription className="text-slate-600">
                 Assign cohorts for {selectedTrainer?.firstName} {selectedTrainer?.lastName}
               </DialogDescription>
@@ -614,7 +614,7 @@ function TrainersPage() {
                   type="submit"
                   className="bg-slate-900 hover:bg-slate-800 text-white font-medium"
                 >
-                  Update Assignments
+                  Update Trainer
                 </Button>
               </div>
             </form>

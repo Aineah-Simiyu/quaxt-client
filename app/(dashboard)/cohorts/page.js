@@ -130,7 +130,7 @@ function CohortsPage() {
       description: cohort.description || '',
       startDate: cohort.startDate ? new Date(cohort.startDate).toISOString().split('T')[0] : '',
       endDate: cohort.endDate ? new Date(cohort.endDate).toISOString().split('T')[0] : '',
-      status: cohort.status
+      status: cohort.isActive ? "Active" : "False"
     });
     setIsEditDialogOpen(true);
   };
@@ -230,7 +230,7 @@ function CohortsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status" className="text-sm font-medium">Status</Label>
-                <Select value={cohortForm.status} onValueChange={(value) => setCohortForm({ ...cohortForm, status: value })}>
+                <Select value={cohortForm.isActive} onValueChange={(value) => setCohortForm({ ...cohortForm, status: value })}>
                   <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
@@ -351,7 +351,7 @@ function CohortsPage() {
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>Created {new Date(cohort.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    <span className="font-medium">View Details →</span>
+                    <span onClick={() => handleEditCohort(cohort)} className="font-medium">View Details →</span>
                   </div>
                 </CardContent>
               </Card>

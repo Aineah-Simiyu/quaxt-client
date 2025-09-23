@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Mail, ArrowLeft, Shield, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { apiClient } from '@/lib/api';
 
 const formSchema = z.object({
 	email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -39,12 +40,8 @@ export default function ForgotPasswordPage() {
 		try {
 			setIsLoading(true);
 			
-			const response = await fetch('/api/auth/forgot-password', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(values),
+			const response = await apiClient.post('/auth/forgot-password', {
+				email: values.email,
 			});
 
 			if (!response.ok) {

@@ -8,8 +8,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Mail, Lock } from 'lucide-react';
-
+import { useNotifiq } from '@/providers/notificationProvider';
 import { Button } from '@/components/ui/button';
+import {apiClient} from '@/lib/api';
 import {
 	Form,
 	FormControl,
@@ -28,6 +29,7 @@ const formSchema = z.object({
 });
 
 export default function LoginPage() {
+	const { client, ready } = useNotifiq();
 	const [isLoading, setIsLoading] = useState(false);
 	const router = useRouter();
 	const { login } = useAuth();
@@ -40,15 +42,43 @@ export default function LoginPage() {
 			password: '',
 		},
 	});
+
+	const getToken = async () => {
+		if (!ready) return;
+		const token = await client.getToken(); // v2 instance method
+		console.log('Got v2 token:', token);
+	};
+
+	const registerUserToken = async (token) => {
+		try {
+			console.log("Registering token with server:", token.substring(0, 20) + "...");
+			const newRes = await apiClient.post("/fcm-tokens", {
+				token,
+				deviceType: "web",
+			});
+
+			if (!newRes.ok) {
+				throw new Error(`HTTP ${newRes.status}: ${newRes.statusText}`);
+			}
+
+			console.log("Token registered successfully");
+		} catch (err) {
+			console.error("Failed to register FCM token:", err);
+		}
+  };
 	
 	const onSubmit = async (values) => {
+		
 		try {
+
 			setIsLoading(true);
 			const userData = await login(values);
 			
-			
+			localStorage.clear()
 			// Only redirect if user doesn't need to change password
 			if (!userData.mustChangePassword || !userData.emailVerified) {
+				const token = await client.getToken(); // v2 instance method
+				await registerUserToken(token);
 				router.replace('/dashboard');
 			}
 			// If mustChangePassword is true, AuthContext will handle the redirect

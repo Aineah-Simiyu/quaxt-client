@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Lock, ArrowRight, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { apiClient } from '@/lib/api';
 
 const formSchema = z.object({
 	password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
@@ -50,9 +51,10 @@ export default function ResetPasswordPage() {
 	useEffect(() => {
 		const verifyToken = async () => {
 			try {
-				const response = await fetch(`/api/auth/verify-reset-token/${token}`);
-				if (!response.ok) {
-					setIsValidToken(false);
+				const response = await apiClient.get(`/auth/verify-reset-token/${token}`);
+				if (response.data.success) {
+					setIsValidToken(true);	
+					// setIsValidToken(false);
 				}
 			} catch (error) {
 				console.error('Token verification error:', error);
@@ -74,20 +76,18 @@ export default function ResetPasswordPage() {
 		try {
 			setIsLoading(true);
 			
-			const response = await fetch('/api/auth/reset-password', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					token,
-					password: values.password,
-				}),
+			const response = await apiClient.post(`/auth/reset-password/${token}`, {			
+				password: values.password,
 			});
 
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || 'Failed to reset password');
+			if (response.data.success) {
+				setIsSuccess(true);
+			} else {
+				toast({
+					title: "Error",
+					description: response.data.message || "Failed to reset password. Please try again.",
+					variant: "destructive"
+				});
 			}
 
 			setIsSuccess(true);

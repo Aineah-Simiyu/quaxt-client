@@ -174,10 +174,10 @@ export default function AssignmentsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-light text-slate-900 tracking-tight">
-              Projects
+              Assignments
             </h1>
             <p className="text-slate-600 mt-1 font-normal">
-              {assignmentData.length} active projects • Manage deliverables and timelines
+              {assignmentData.length} active assignments • Manage deliverables and timelines
             </p>
           </div>
           {isInstructorOrAdmin(user) && (
@@ -186,7 +186,7 @@ export default function AssignmentsPage() {
               className="bg-slate-900 hover:bg-slate-800 text-white border-0 shadow-sm font-medium px-4 py-2 h-9"
             >
               <Link href="/assignments/create">
-                <Plus className="mr-2 h-4 w-4" /> New Project
+                <Plus className="mr-2 h-4 w-4" /> New Assignment
               </Link>
             </Button>
           )}
@@ -198,7 +198,7 @@ export default function AssignmentsPage() {
             <div className="relative w-80">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search projects..."
+                placeholder="Search Assignments..."
                 className="pl-9 h-9 border-slate-200 focus:border-slate-400 focus:ring-0 bg-slate-50 text-sm"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -235,7 +235,7 @@ export default function AssignmentsPage() {
                     : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
                 }`}
               >
-                All Projects
+                All Assignments
                 <span className="ml-2 px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded-full">
                   {statusCounts.all}
                 </span>
@@ -304,11 +304,11 @@ export default function AssignmentsPage() {
                 <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center mb-4">
                   <FileText className="h-6 w-6 text-slate-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">No projects found</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">No Assignments found</h3>
                 <p className="text-slate-600 text-sm max-w-md">
                   {searchQuery
-                    ? "No projects match your search criteria. Try adjusting your filters."
-                    : "You don't have any projects in this category yet. New projects will appear here."}
+                    ? "No Assignments match your search criteria. Try adjusting your filters."
+                    : "You don't have any Assignments in this category yet. New Assignments will appear here."}
                 </p>
               </div>
             ) : (
@@ -402,7 +402,7 @@ export default function AssignmentsPage() {
                               {assignment.points} pts
                             </div>
                             <div className="px-2 py-1 bg-blue-50 rounded text-xs font-medium text-blue-700">
-                              Project
+                              Assignment
                             </div>
                           </div>
                           <div className="text-xs text-slate-500 font-medium">
@@ -438,7 +438,7 @@ export default function AssignmentsPage() {
         {/* Footer Stats */}
         <div className="mt-8 flex items-center justify-between text-sm text-slate-600 pt-6 border-t border-slate-200">
           <div className="flex items-center space-x-6">
-            <span>{filteredAssignments.length} projects displayed</span>
+            <span>{filteredAssignments.length} Assignments displayed</span>
             <span>Updated {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           <div className="flex items-center space-x-4">
