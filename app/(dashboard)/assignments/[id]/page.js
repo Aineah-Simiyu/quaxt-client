@@ -36,6 +36,7 @@ export default function AssignmentDetailPage() {
   const [submissionLinks, setSubmissionLinks] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [gradingSubmission, setGradingSubmission] = useState(null);
+  const [isEditingSubmission, setIsEditingSubmission] = useState(false);
   const { toast } = useToast();
 
   // Role-based access control
@@ -43,7 +44,7 @@ export default function AssignmentDetailPage() {
   const isTrainer = user?.role === 'trainer';
   const isSchoolAdmin = user?.role === 'school_admin';
   const isInstructorOrAdmin = isTrainer || isSchoolAdmin;
-  
+
   // Get role-specific styling and icons
   const getRoleConfig = () => {
     if (isSchoolAdmin) {
@@ -144,6 +145,38 @@ export default function AssignmentDetailPage() {
       fetchAssignment();
     }
   }, [id, user]);
+
+  // Prefill form fields when submission data is loaded or when entering edit mode
+  useEffect(() => {
+    if (submission && submission.content && isStudent && (submission.status !== 'submitted' || isEditingSubmission)) {
+      // Prefill text content
+      if (submission.content.text) {
+        setSubmissionText(submission.content.text);
+      }
+      
+      // Prefill links
+      if (submission.content.links && submission.content.links.length > 0) {
+        setSubmissionLinks(submission.content.links);
+      }
+      
+      // Note: Files are handled differently since they're already uploaded
+      // They will be displayed in the submitted files section
+    }
+  }, [submission, isStudent, isEditingSubmission]);
+
+  const handleEditSubmission = () => {
+    setIsEditingSubmission(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingSubmission(false);
+    // Reset form fields to original submission content
+    if (submission && submission.content) {
+      setSubmissionText(submission.content.text || '');
+      setSubmissionLinks(submission.content.links || []);
+      setSelectedFiles([]);
+    }
+  };
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -318,8 +351,8 @@ export default function AssignmentDetailPage() {
         try {
           const uploadResponses = await fileService.uploadFiles(selectedFiles);
           submissionData.content.files = uploadResponses.map(response => response.data.file);
-          console.log('handleSubmit - uploadResponses:', uploadResponses);
-          console.log('handleSubmit - mapped files:', submissionData.content.files);
+          // console.log('handleSubmit - uploadResponses:', uploadResponses);
+          // console.log('handleSubmit - mapped files:', submissionData.content.files);
         } catch (uploadError) {
           toast({
             variant: "destructive",
@@ -333,18 +366,26 @@ export default function AssignmentDetailPage() {
       
       console.log('handleSubmit - final submissionData:', JSON.stringify(submissionData, null, 2));
       
-      // Submit the assignment
-      const result = await assignmentService.submitAssignment(id, submissionData);
+      // Submit or update the assignment
+      let result;
+      if (isEditingSubmission && submission?._id) {
+        // Update existing submission using PUT
+        result = await assignmentService.updateSubmission(submission._id, submissionData);
+      } else {
+        // Create new submission using POST
+        result = await assignmentService.submitAssignment(id, submissionData);
+      }
       
       // Update submission status
       setSubmission(result);
       setSelectedFiles([]);
       setSubmissionText('');
       setSubmissionLinks([]);
+      setIsEditingSubmission(false);
       
       toast({
         title: "Success",
-        description: "Assignment submitted successfully"
+        description: isEditingSubmission ? "Assignment updated successfully" : "Assignment submitted successfully"
       });
     } catch (error) {
       toast({
@@ -1206,7 +1247,7 @@ export default function AssignmentDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {submission?.status === 'submitted' ? (
+              {submission?.status === 'submitted' && !isEditingSubmission ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-3">
@@ -1218,12 +1259,23 @@ export default function AssignmentDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="bg-green-50">
-                      Submitted
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      {/* <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleEditSubmission}
+                        className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit Submission
+                      </Button> */}
+                      <Badge variant="outline" className="bg-green-50">
+                        Submitted
+                      </Badge>
+                    </div>
                   </div>
                   
-                  {submission.grade !== null && (
+                  {/* {submission.grade !== null && (
                     <div className="p-4 border rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">Grade</h4>
@@ -1241,7 +1293,7 @@ export default function AssignmentDetailPage() {
                         </div>
                       )}
                     </div>
-                  )}
+                  )} */}
                   
                   {/* Display submitted text content */}
                   {submission.content?.text && (
@@ -1304,8 +1356,29 @@ export default function AssignmentDetailPage() {
                 <div className="space-y-6">
                   {/* Single Unified Submission Interface */}
                   <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-lg font-medium text-slate-900 mb-2">Submit Your Assignment</h3>
-                    <p className="text-sm text-slate-600 mb-4">Add text, links, and upload files for your submission</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-medium text-slate-900 mb-2">
+                          {isEditingSubmission ? 'Edit Your Submission' : 'Submit Your Assignment'}
+                        </h3>
+                        <p className="text-sm text-slate-600 mb-4">
+                          {isEditingSubmission 
+                            ? 'Update your assignment submission with new content' 
+                            : 'Add text, links, and upload files for your submission'
+                          }
+                        </p>
+                      </div>
+                      {isEditingSubmission && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleCancelEdit}
+                          className="text-gray-600 hover:text-gray-700"
+                        >
+                          Cancel Edit
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Text Submission */}
@@ -1446,7 +1519,10 @@ export default function AssignmentDetailPage() {
                       onClick={handleSubmit} 
                       disabled={submitting || (!hasSubmissionContent())}
                     >
-                      {submitting ? 'Submitting...' : 'Submit Assignment'}
+                      {submitting 
+                        ? (isEditingSubmission ? 'Updating...' : 'Submitting...') 
+                        : (isEditingSubmission ? 'Update Assignment' : 'Submit Assignment')
+                      }
                     </Button>
                   </div>
                 </div>

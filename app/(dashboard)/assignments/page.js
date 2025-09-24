@@ -317,7 +317,7 @@ export default function AssignmentsPage() {
                   const status = getAssignmentStatus(assignment);
                   const isSubmitted = status === 'submitted';
                   const isOverdue = status === 'overdue';
-                  const isClickable = !isSubmitted && !isOverdue;
+                  const isClickable = true
                   
                   const cardContent = (
                     <Card className={`h-full transition-all duration-200 border ${
