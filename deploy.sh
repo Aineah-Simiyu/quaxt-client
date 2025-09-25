@@ -3,7 +3,7 @@ set -euo pipefail
 
 SERVER_USER="wc-master"
 SERVER_IP="15.235.33.33"
-REMOTE_DIR="/home/wc-master/apps/quaxt/frontend"
+REMOTE_DIR="/home/wc-master/apps/quaxt-client"
 PM2_CONFIG_DIR="/home/wc-master/apps"
 SSH_KEY="${HOME}/keys/quxta_key"
 ENV_FILE=".env.production"

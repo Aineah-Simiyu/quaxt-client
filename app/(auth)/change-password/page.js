@@ -78,7 +78,7 @@ const ChangePasswordPage = memo(function ChangePasswordPage() {
 	const { logout, user } = useAuth();
 
 	// Determine if user needs KYC step (student role and isPhone false)
-	const needsKyc = user?.role === 'student' && !user?.isPhone;
+	const needsKyc = user?.role === 'student' || user?.role === 'trainer' && !user?.isPhone;
 
 	// KYC form for step 1
 	const kycForm = useForm({
