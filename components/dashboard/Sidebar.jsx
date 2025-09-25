@@ -75,11 +75,11 @@ export default function Sidebar({ onClose }) {
         href: '/students',
         icon: GraduationCap,
       },
-      {
-        name: 'Analytics',
-        href: '/analytics',
-        icon: BarChart,
-      }
+      // {
+      //   name: 'Analytics',
+      //   href: '/analytics',
+      //   icon: BarChart,
+      // }
     );
   }
   // Add instructor/admin specific items (but not school admin to avoid duplication)
@@ -90,35 +90,35 @@ export default function Sidebar({ onClose }) {
         href: '/students',
         icon: Users,
       },
-      {
-        name: 'Analytics',
-        href: '/analytics',
-        icon: BarChart,
-      }
+      // {
+      //   name: 'Analytics',
+      //   href: '/analytics',
+      //   icon: BarChart,
+      // }
     );
   }
   
   // Add admin-only items
   if (isAdmin(user)) {
     navItems.push(
-      {
-        name: 'School Management',
-        href: '/school-management',
-        icon: School,
-      }
+      // {
+      //   name: 'School Management',
+      //   href: '/school-management',
+      //   icon: School,
+      // }
     );
   }
 
   // Add common items at the end
   navItems.push(
+    // {
+    //   name: 'Resources',
+    //   href: '/resources',
+    //   icon: BookOpen,
+    // },
     {
-      name: 'Resources',
-      href: '/resources',
-      icon: BookOpen,
-    },
-    {
-      name: 'Settings',
-      href: '/settings',
+      name: 'Profile',
+      href: '/profile',
       icon: Settings,
     }
   );

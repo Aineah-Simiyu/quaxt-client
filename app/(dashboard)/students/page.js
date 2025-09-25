@@ -127,14 +127,71 @@ function StudentsPage() {
     return Math.round(progress);
   };
 
+  // Helper function to enrich student data with cohort information
+  const enrichStudentWithCohorts = async (students, allCohorts) => {
+    const studentMap = new Map();
+    
+    // Initialize all students in the map
+    students.forEach(student => {
+      studentMap.set(student._id, {
+        ...student,
+        cohorts: [],
+        overallProgress: 0,
+        status: student.isActive === false ? 'inactive' : 'active',
+        joinedDate: student.createdAt
+      });
+    });
+    
+    // Enrich with cohort data
+    for (const cohort of allCohorts) {
+      if (cohort.students && Array.isArray(cohort.students)) {
+        for (const studentRef of cohort.students) {
+          const studentId = typeof studentRef === 'string' ? studentRef : studentRef._id;
+          
+          if (studentMap.has(studentId)) {
+            const student = studentMap.get(studentId);
+            const progress = calculateStudentProgress(cohort, student.createdAt);
+            
+            // Add cohort information
+            const cohortInfo = {
+              _id: cohort._id,
+              name: cohort.name,
+              progress: progress,
+              status: cohort.status,
+              startDate: cohort.startDate,
+              endDate: cohort.endDate
+            };
+            
+            student.cohorts.push(cohortInfo);
+            
+            // Update overall progress (average of all cohorts)
+            const totalProgress = student.cohorts.reduce((sum, c) => sum + c.progress, 0);
+            student.overallProgress = Math.round(totalProgress / student.cohorts.length);
+          }
+        }
+      }
+    }
+    
+    return Array.from(studentMap.values());
+  };
+
   // Fetch students data
   const fetchStudents = async () => {
     try {
       let studentsData = [];
       
       if (isSchoolAdmin(user)) {
-        const response = await userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT);
-        studentsData = response.data || [];
+        // For school admins, get all students and enrich with cohort data
+        const [studentsResponse, cohortsResponse] = await Promise.all([
+          userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT),
+          cohortService.getCohortsBySchool(user.school)
+        ]);
+        
+        const rawStudents = studentsResponse.data || [];
+        const allCohorts = cohortsResponse.data || [];
+        
+        // Enrich students with cohort information
+        studentsData = await enrichStudentWithCohorts(rawStudents, allCohorts);
       } else {
         // For trainers, get students from their cohorts with complete information
         const cohortResponse = await cohortService.getCohortsByTrainer(user._id);

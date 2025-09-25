@@ -73,6 +73,17 @@ export default function AssignmentDetailPage() {
   
   const roleConfig = getRoleConfig();
 
+  // Helper function to check if assignment is overdue
+  const isAssignmentOverdue = (dueDateString) => {
+    if (!dueDateString) return false;
+    const dueDate = new Date(dueDateString);
+    const today = new Date();
+    return today > dueDate;
+  };
+
+  // Check if current assignment is overdue
+  const isOverdue = assignment ? isAssignmentOverdue(assignment.dueDate) : false;
+
   useEffect(() => {
     const fetchAssignment = async () => {
       try {
@@ -99,16 +110,68 @@ export default function AssignmentDetailPage() {
             setSubmissions([]);
           }
         } else if (isStudent) {
-          // For students, fetch their submission for this assignment
-          try {
-            const submissions = await assignmentService.getSubmissions(id, { 
-              studentId: user.id 
-            });
-            
-            if (submissions && submissions.length > 0) {
-              setSubmission(submissions[0]);
+          // For students, check if the assignment already includes submission data
+          if (data.submission) {
+            // Use the submission data already included in the assignment response
+            setSubmission(data.submission);
+          } else if (data.gradedSubmissions && data.gradedSubmissions.length > 0) {
+            // Fallback: check if there's a graded submission in the gradedSubmissions array
+            const gradedSubmission = data.gradedSubmissions.find(sub => sub.student === user.id);
+            if (gradedSubmission) {
+              setSubmission(gradedSubmission);
             } else {
-              // No submission yet
+              // Try to fetch their submission for this assignment
+              try {
+                const submissions = await assignmentService.getSubmissions(id, { 
+                  studentId: user.id 
+                });
+                
+                if (submissions && submissions.length > 0) {
+                  setSubmission(submissions[0]);
+                } else {
+                  // No submission yet
+                  setSubmission({
+                    status: 'draft',
+                    submittedAt: null,
+                    grade: null,
+                    feedback: null,
+                    files: [],
+                  });
+                }
+              } catch (submissionError) {
+                console.error('Submission fetch error:', submissionError);
+                // Initialize with empty submission
+                setSubmission({
+                  status: 'draft',
+                  submittedAt: null,
+                  grade: null,
+                  feedback: null,
+                  files: [],
+                });
+              }
+            }
+          } else {
+            // Try to fetch their submission for this assignment
+            try {
+              const submissions = await assignmentService.getSubmissions(id, { 
+                studentId: user.id 
+              });
+              
+              if (submissions && submissions.length > 0) {
+                setSubmission(submissions[0]);
+              } else {
+                // No submission yet
+                setSubmission({
+                  status: 'draft',
+                  submittedAt: null,
+                  grade: null,
+                  feedback: null,
+                  files: [],
+                });
+              }
+            } catch (submissionError) {
+              console.error('Submission fetch error:', submissionError);
+              // Initialize with empty submission
               setSubmission({
                 status: 'draft',
                 submittedAt: null,
@@ -117,16 +180,6 @@ export default function AssignmentDetailPage() {
                 files: [],
               });
             }
-          } catch (submissionError) {
-            console.error('Submission fetch error:', submissionError);
-            // Initialize with empty submission
-            setSubmission({
-              status: 'draft',
-              submittedAt: null,
-              grade: null,
-              feedback: null,
-              files: [],
-            });
           }
         }
       } catch (error) {
@@ -481,9 +534,16 @@ export default function AssignmentDetailPage() {
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 font-medium">
-                      {assignment.status || 'Published'}
-                    </Badge>
+                    {isOverdue ? (
+                      <Badge className="bg-red-50 text-red-700 border border-red-200 px-3 py-1 font-medium flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Overdue
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 font-medium">
+                        {assignment.status || 'Published'}
+                      </Badge>
+                    )}
                     {assignment.priority && (
                       <Badge className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 font-medium flex items-center gap-1">
                         <Target className="h-3 w-3" />
@@ -545,8 +605,8 @@ export default function AssignmentDetailPage() {
 
         {/* Main Content */}
         {isInstructorOrAdmin ? (
-          <Tabs defaultValue="overview" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-4 bg-white border-0 shadow-sm rounded-xl p-1.5 h-14">
+          <Tabs defaultValue="overview" className="space-y-8 w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-white border-0 shadow-sm rounded-xl p-1.5 h-14">
               <TabsTrigger 
                 value="overview" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
@@ -561,20 +621,20 @@ export default function AssignmentDetailPage() {
                 <Users className="h-4 w-4 mr-2" />
                 Submissions
               </TabsTrigger>
-              <TabsTrigger 
+              {/* <TabsTrigger 
                 value="analytics" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Analytics
-              </TabsTrigger>
-              <TabsTrigger 
+              </TabsTrigger> */}
+              {/* <TabsTrigger 
                 value="grading" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Grading
-              </TabsTrigger>
+              </TabsTrigger> */}
             </TabsList>
           
             {/* Overview Tab */}
@@ -635,7 +695,7 @@ export default function AssignmentDetailPage() {
                   </Card>
                   
                   {/* Rubric Section */}
-                  {assignment.rubric && (
+                  {/* {assignment.rubric && (
                     <Card className="border-0 shadow-sm bg-white">
                       <CardHeader className="bg-slate-50/50 border-b border-slate-100 rounded-t-lg">
                         <CardTitle className="text-xl font-light text-slate-900 flex items-center gap-3">
@@ -659,7 +719,7 @@ export default function AssignmentDetailPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  )}
+                  )} */}
                 </div>
                 
                 {/* Sidebar */}
@@ -951,7 +1011,7 @@ export default function AssignmentDetailPage() {
                 )}
               </div>
               
-              {/* Performance Insights */}
+              {/* Performance Insights
               <div className="space-y-6">
                 <Card className="border-0 shadow-sm bg-white">
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100 rounded-t-lg">
@@ -1008,7 +1068,7 @@ export default function AssignmentDetailPage() {
                     </Button>
                   </CardContent>
                 </Card>
-              </div>
+              </div> */}
             </div>
           </TabsContent>
           
@@ -1240,60 +1300,84 @@ export default function AssignmentDetailPage() {
                 <span>Your Submission</span>
               </CardTitle>
               <CardDescription>
-                {submission?.status === 'submitted' 
+                {isOverdue 
+                  ? 'This assignment is overdue and no longer accepts submissions'
+                  : submission?.status === 'graded' 
+                  ? 'Your assignment has been graded'
+                  : submission?.status === 'submitted' 
                   ? 'You have submitted this assignment'
                   : 'Submit your assignment before the due date'
                 }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {submission?.status === 'submitted' && !isEditingSubmission ? (
+              {isOverdue && !submission ? (
+                <div className="text-center py-8">
+                  <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="h-8 w-8 text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-slate-900 mb-2">Assignment Overdue</h3>
+                  <p className="text-slate-600">This assignment is past its due date and no longer accepts submissions.</p>
+                  <p className="text-sm text-slate-500 mt-2">Due date was: {formatDate(assignment.dueDate)}</p>
+                </div>
+              ) : (submission?.status === 'submitted' || submission?.status === 'graded') && !isEditingSubmission ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-3">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      {submission?.status === 'graded' ? (
+                        <Star className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      )}
                       <div>
-                        <p className="font-medium">Assignment Submitted</p>
+                        <p className="font-medium">
+                          {submission?.status === 'graded' ? 'Assignment Graded' : 'Assignment Submitted'}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           Submitted on {formatDate(submission.submittedAt)}
+                          {submission?.status === 'graded' && submission.grade?.gradedAt && (
+                            <span> • Graded on {formatDate(submission.grade.gradedAt)}</span>
+                          )}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {/* <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleEditSubmission}
-                        className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit Submission
-                      </Button> */}
-                      <Badge variant="outline" className="bg-green-50">
-                        Submitted
-                      </Badge>
+                      {submission?.status === 'graded' ? (
+                        <>
+                          <div className="text-right mr-2">
+                            <div className="text-lg font-bold text-blue-600">
+                              {submission.grade?.score}/{assignment.points}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {Math.round((submission.grade?.score / assignment.points) * 100)}%
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            Graded
+                          </Badge>
+                        </>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50">
+                          Submitted
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   
-                  {/* {submission.grade !== null && (
-                    <div className="p-4 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">Grade</h4>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold">{submission.grade}/{assignment.points}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {Math.round((submission.grade / assignment.points) * 100)}%
-                          </div>
+                  {/* Display feedback for graded submissions */}
+                  {submission?.status === 'graded' && submission.grade?.feedback && (
+                    <div className="p-6 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <MessageSquare className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-slate-900 mb-2">Instructor Feedback</h4>
+                          <p className="text-slate-700 leading-relaxed">{submission.grade.feedback}</p>
                         </div>
                       </div>
-                      {submission.feedback && (
-                        <div className="mt-3 p-3 bg-muted rounded-md">
-                          <h5 className="font-medium mb-1">Feedback</h5>
-                          <p className="text-sm text-muted-foreground">{submission.feedback}</p>
-                        </div>
-                      )}
                     </div>
-                  )} */}
+                  )}
                   
                   {/* Display submitted text content */}
                   {submission.content?.text && (
@@ -1351,8 +1435,22 @@ export default function AssignmentDetailPage() {
                       ))}
                     </div>
                   )}
+                  
+                  {/* Edit button for submitted (but not graded) assignments */}
+                  {submission?.status === 'submitted' && !isOverdue && (
+                    <div className="pt-4 border-t">
+                      <Button 
+                        variant="outline" 
+                        onClick={handleEditSubmission}
+                        className="w-full"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Submission
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              ) : (
+              ) : !isOverdue ? (
                 <div className="space-y-6">
                   {/* Single Unified Submission Interface */}
                   <div className="bg-slate-50 rounded-lg p-4">
@@ -1526,7 +1624,7 @@ export default function AssignmentDetailPage() {
                     </Button>
                   </div>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </div>

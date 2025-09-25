@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Filter, FileText, Calendar, Clock, CheckCircle2, AlertCircle, Users, XCircle } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Search, Filter, FileText, Calendar, Clock, CheckCircle2, AlertCircle, Users, XCircle, Grid3X3, List } from 'lucide-react';
 import { ROLES, isInstructorOrAdmin } from '@/lib/constants';
 
 export default function AssignmentsPage() {
@@ -20,6 +21,7 @@ export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
   const { toast } = useToast();
 
   useEffect(() => {
@@ -94,6 +96,23 @@ export default function AssignmentsPage() {
   // Helper function to get assignment status
   const getAssignmentStatus = (assignment) => {
     const assignmentId = assignment._id || assignment.id;
+    
+    // Check if assignment is graded (for students)
+    if (user?.role === 'student') {
+      // First check the submissionStatus field from API response
+      if (assignment.submissionStatus === 'graded') {
+        return 'graded';
+      }
+      
+      // Also check gradedSubmissions array as fallback
+      if (assignment.gradedSubmissions && assignment.gradedSubmissions.length > 0) {
+        const studentGradedSubmission = assignment.gradedSubmissions.find(
+          submission => submission.student === user.id && submission.status === 'graded'
+        );
+        if (studentGradedSubmission) return 'graded';
+      }
+    }
+    
     const isSubmitted = user?.role === 'student' && isAssignmentSubmitted(assignmentId);
     const isOverdue = isAssignmentOverdue(assignment.dueDate);
     
@@ -116,12 +135,18 @@ export default function AssignmentsPage() {
     if (user?.role === 'student') {
       const status = getAssignmentStatus(assignment);
       
-      if (activeTab === 'completed') return status === 'submitted';
+      if (activeTab === 'submitted') return status === 'submitted';
+      if (activeTab === 'graded') return status === 'graded';
       if (activeTab === 'overdue') return status === 'overdue';
-      if (activeTab === 'active' || activeTab === 'pending') return status === 'active';
+      if (activeTab === 'active') return status === 'active';
     }
     
     // For instructors/admins, show all assignments in all tabs for now
+    if (isInstructorOrAdmin(user)) {
+      if (activeTab === 'pending') return true; // TODO: Add logic for pending review
+      if (activeTab === 'completed') return true; // TODO: Add logic for completed assignments
+    }
+    
     return true;
   });
 
@@ -129,6 +154,9 @@ export default function AssignmentsPage() {
     if (user?.role === 'student') {
       const submittedCount = assignmentData.filter(assignment => 
         getAssignmentStatus(assignment) === 'submitted'
+      ).length;
+      const gradedCount = assignmentData.filter(assignment => 
+        getAssignmentStatus(assignment) === 'graded'
       ).length;
       const overdueCount = assignmentData.filter(assignment => 
         getAssignmentStatus(assignment) === 'overdue'
@@ -140,17 +168,18 @@ export default function AssignmentsPage() {
       return {
         all: assignmentData.length,
         active: activeCount,
-        pending: activeCount,
-        completed: submittedCount,
+        submitted: submittedCount,
+        graded: gradedCount,
         overdue: overdueCount
       };
     }
     
+    // For instructors/admins
     return {
       all: assignmentData.length,
       active: assignmentData.length,
-      pending: 0,
-      completed: 0,
+      pending: 0, // TODO: Calculate pending review count
+      completed: 0, // TODO: Calculate completed assignments count
       overdue: 0
     };
   };
@@ -205,6 +234,32 @@ export default function AssignmentsPage() {
               />
             </div>
             <div className="flex items-center space-x-3">
+              <div className="flex items-center border border-slate-200/60 rounded-lg overflow-hidden shadow-sm bg-white">
+                <Button
+                  variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('cards')}
+                  className={`h-9 px-4 rounded-r-none border-0 transition-all duration-200 ${
+                    viewMode === 'cards' 
+                      ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-sm' 
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <Grid3X3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className={`h-9 px-4 rounded-l-none border-0 transition-all duration-200 ${
+                    viewMode === 'table' 
+                      ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-sm' 
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -253,33 +308,39 @@ export default function AssignmentsPage() {
                   {statusCounts.active}
                 </span>
               </button>
-              <button
-                onClick={() => setActiveTab('pending')}
-                className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                  activeTab === 'pending'
-                    ? 'border-slate-900 text-slate-900'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-                }`}
-              >
-                Pending
-                <span className="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">
-                  {statusCounts.pending}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('completed')}
-                className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                  activeTab === 'completed'
-                    ? 'border-slate-900 text-slate-900'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-                }`}
-              >
-                Completed
-                <span className="ml-2 px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded-full">
-                  {statusCounts.completed}
-                </span>
-              </button>
-              {/* Add Overdue tab for students */}
+              {/* Show Submitted tab for students */}
+              {user?.role === 'student' && (
+                <button
+                  onClick={() => setActiveTab('submitted')}
+                  className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
+                    activeTab === 'submitted'
+                      ? 'border-slate-900 text-slate-900'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                  }`}
+                >
+                  Submitted
+                  <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
+                    {statusCounts.submitted}
+                  </span>
+                </button>
+              )}
+              {/* Show Graded tab for students */}
+              {user?.role === 'student' && (
+                <button
+                  onClick={() => setActiveTab('graded')}
+                  className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
+                    activeTab === 'graded'
+                      ? 'border-slate-900 text-slate-900'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                  }`}
+                >
+                  Graded
+                  <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+                    {statusCounts.graded}
+                  </span>
+                </button>
+              )}
+              {/* Show Overdue tab for students */}
               {user?.role === 'student' && (
                 <button
                   onClick={() => setActiveTab('overdue')}
@@ -294,6 +355,37 @@ export default function AssignmentsPage() {
                     {statusCounts.overdue}
                   </span>
                 </button>
+              )}
+              {/* Show additional tabs for instructors/admins */}
+              {isInstructorOrAdmin(user) && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('pending')}
+                    className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
+                      activeTab === 'pending'
+                        ? 'border-slate-900 text-slate-900'
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    Pending Review
+                    <span className="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">
+                      {statusCounts.pending}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('completed')}
+                    className={`py-3 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
+                      activeTab === 'completed'
+                        ? 'border-slate-900 text-slate-900'
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    Completed
+                    <span className="ml-2 px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded-full">
+                      {statusCounts.completed}
+                    </span>
+                  </button>
+                </>
               )}
             </nav>
           </div>
@@ -311,17 +403,127 @@ export default function AssignmentsPage() {
                     : "You don't have any Assignments in this category yet. New Assignments will appear here."}
                 </p>
               </div>
+            ) : viewMode === 'table' ? (
+              <div className="bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+                <div className="overflow-x-auto">
+                  <Table className="w-full">
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50 border-b border-slate-200/60">
+                      <TableHead className="font-semibold text-slate-700 py-3 px-6 text-left text-sm tracking-wide">Assignment</TableHead>
+                      <TableHead className="font-semibold text-slate-700 py-3 px-4 text-left text-sm tracking-wide">Due Date</TableHead>
+                      <TableHead className="font-semibold text-slate-700 py-3 px-4 text-left text-sm tracking-wide">Status</TableHead>
+                      <TableHead className="font-semibold text-slate-700 py-3 px-4 text-left text-sm tracking-wide">Points</TableHead>
+                      {user?.role === 'student' && <TableHead className="font-semibold text-slate-700 py-3 px-4 text-left text-sm tracking-wide">Grade</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAssignments.map((assignment) => {
+                      const status = getAssignmentStatus(assignment);
+                      const isSubmitted = status === 'submitted';
+                      const isGraded = status === 'graded';
+                      const isOverdue = status === 'overdue';
+                      
+                      // Get graded submission data for the current student
+                      const gradedSubmission = isGraded 
+                        ? (
+                            assignment.submission?.grade 
+                              ? assignment.submission
+                              : assignment.gradedSubmissions?.find(
+                                  submission => submission.student === user.id && submission.status === 'graded'
+                                )
+                          )
+                        : null;
+
+                      return (
+                        <TableRow 
+                          key={assignment._id || assignment.id}
+                          className="group cursor-pointer hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100/60 hover:border-slate-200"
+                          onClick={() => window.location.href = `/assignments/${assignment._id || assignment.id}`}
+                        >
+                          <TableCell className="py-4 px-6">
+                            <div className="space-y-1">
+                              <div className="font-medium text-slate-900 group-hover:text-slate-700 transition-colors line-clamp-1">{assignment.title}</div>
+                              <div className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors line-clamp-2 leading-relaxed">{assignment.description}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 px-4">
+                            <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>
+                              {formatDate(assignment.dueDate)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 px-4">
+                            {isGraded ? (
+                              <Badge variant="outline" className="bg-blue-50/80 border-blue-200/80 text-blue-700 font-medium shadow-sm">
+                                <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                                Graded
+                              </Badge>
+                            ) : isSubmitted ? (
+                              <Badge variant="outline" className="bg-emerald-50/80 border-emerald-200/80 text-emerald-700 font-medium shadow-sm">
+                                <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                                Submitted
+                              </Badge>
+                            ) : isOverdue ? (
+                              <Badge variant="outline" className="bg-red-50/80 border-red-200/80 text-red-700 font-medium shadow-sm">
+                                <XCircle className="h-3 w-3 mr-1.5" />
+                                Overdue
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-green-50/80 border-green-200/80 text-green-700 font-medium shadow-sm">
+                                <div className="h-2 w-2 bg-green-500 rounded-full mr-1.5"></div>
+                                Active
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-4 px-4">
+                            <span className="text-sm font-medium text-slate-700">
+                              {assignment.points || assignment.totalPoints || 100} pts
+                            </span>
+                          </TableCell>
+                          {user?.role === 'student' && (
+                            <TableCell className="py-4 px-4">
+                              {isGraded ? (
+                                <span className="text-sm font-semibold text-blue-700 bg-blue-50/50 px-2 py-1 rounded-md">
+                                  {gradedSubmission?.grade?.score || 0}/{assignment.points || assignment.totalPoints || gradedSubmission?.grade?.totalPoints || 100}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-slate-400 font-medium">-</span>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                  </Table>
+                </div>
+              </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredAssignments.map((assignment) => {
                   const status = getAssignmentStatus(assignment);
                   const isSubmitted = status === 'submitted';
+                  const isGraded = status === 'graded';
                   const isOverdue = status === 'overdue';
                   const isClickable = true
                   
+                  // Get graded submission data for the current student
+                  const gradedSubmission = isGraded 
+                    ? (
+                        // First check if there's a direct submission with grade
+                        assignment.submission?.grade 
+                          ? assignment.submission
+                          // Then check gradedSubmissions array
+                          : assignment.gradedSubmissions?.find(
+                              submission => submission.student === user.id && submission.status === 'graded'
+                            )
+                      )
+                    : null;
+                  
                   const cardContent = (
                     <Card className={`h-full transition-all duration-200 border ${
-                      isSubmitted 
+                      isGraded
+                        ? 'cursor-pointer hover:shadow-md hover:border-blue-300 bg-blue-50/30 border-blue-200 group'
+                        : isSubmitted 
                         ? 'opacity-75 cursor-default border-emerald-200 bg-emerald-50/30' 
                         : isOverdue
                         ? 'opacity-75 cursor-not-allowed border-red-200 bg-red-50/30'
@@ -335,7 +537,12 @@ export default function AssignmentsPage() {
                             {assignment.title}
                           </CardTitle>
                           <div className="flex items-center">
-                            {isSubmitted ? (
+                            {isGraded ? (
+                              <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 font-medium">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Graded ({gradedSubmission?.grade?.score || 0}/{assignment.points || assignment.totalPoints || gradedSubmission?.grade?.totalPoints || 100})
+                              </Badge>
+                            ) : isSubmitted ? (
                               <Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700 font-medium">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Submitted
@@ -406,7 +613,9 @@ export default function AssignmentsPage() {
                             </div>
                           </div>
                           <div className="text-xs text-slate-500 font-medium">
-                            {isSubmitted 
+                            {isGraded
+                              ? 'View Grade & Feedback →'
+                              : isSubmitted 
                               ? 'Submitted ✓' 
                               : isOverdue 
                               ? 'Overdue ⚠️'
