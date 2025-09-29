@@ -1082,7 +1082,7 @@ function TrainersPage() {
                                   }}
                                 >
                                   <Settings className="mr-2 h-4 w-4" />
-                                  Manage Assignments
+                                  Manage Trainer
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
