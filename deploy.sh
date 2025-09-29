@@ -27,8 +27,8 @@ if [ -f "env.local.temp" ]; then
 fi
 
 echo "2. Create highly compressed deployment archive"
-# Use maximum compression (gzip level 9) and exclude more unnecessary files
-tar -czf "$ARCHIVE_NAME" \
+# Use GZIP=-9 environment variable for maximum compression
+GZIP=-9 tar -czf "$ARCHIVE_NAME" \
   --exclude='node_modules' \
   --exclude='*.log' \
   --exclude='*.map' \
@@ -44,7 +44,6 @@ tar -czf "$ARCHIVE_NAME" \
   --exclude='*.test.ts' \
   --exclude='*.spec.js' \
   --exclude='*.spec.ts' \
-  -I "gzip -9" \
   .next package.json package-lock.json public next.config.mjs \
   $(find . -maxdepth 1 -name "*.js" -o -name "*.ts" -o -name "*.json" | grep -v node_modules) \
   $(find app -type f 2>/dev/null || true) \
@@ -92,7 +91,7 @@ scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o Compression=yes \
 
 echo "6. Reload PM2 (Quaxt-Client)"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_IP" \
-  "cd $PM2_CONFIG_DIR && pm2 startOrReload ecosystem.config.js && pm2 save"
+  "cd $PM2_CONFIG_DIR && pm2 reload Quaxt-Client && pm2 save"
 
 echo "7. Cleanup local archive"
 rm "$ARCHIVE_NAME"
