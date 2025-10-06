@@ -30,13 +30,7 @@ import {
 export default function Sidebar({ onClose }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-
-  // Debug logging to identify user role
-  console.log("Sidebar Debug - User object:", user);
-  console.log("Sidebar Debug - User role:", user?.role);
-  console.log("Sidebar Debug - typeof user role:", typeof user?.role);
-  console.log("Sidebar Debug - ROLES.TRAINER:", ROLES.TRAINER);
-
+  
   // Get role display info
   const getRoleInfo = () => {
     switch (user?.role) {
@@ -68,11 +62,11 @@ export default function Sidebar({ onClose }) {
       href: "/assignments",
       icon: FileText,
     },
-    {
-      name: "Sessions",
-      href: "/sessions",
-      icon: Video,
-    },
+    // {
+    //   name: "Sessions",
+    //   href: "/sessions",
+    //   icon: Video,
+    // },
   ];
 
   // Helper function to check if user is trainer/instructor
