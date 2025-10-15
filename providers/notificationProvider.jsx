@@ -13,7 +13,7 @@ export function NotifiqProvider({ children, config }) {
 
   const registerUserToken = async (token) => {
     try {
-      console.log("Registering token with server:", token.substring(0, 20) + "...");
+      
       const newRes = await apiClient.post("/fcm-tokens", {
         token,
         deviceType: "web",
@@ -23,7 +23,7 @@ export function NotifiqProvider({ children, config }) {
         throw new Error(`HTTP ${newRes.status}: ${newRes.statusText}`);
       }
 
-      console.log("Token registered successfully");
+      
     } catch (err) {
       console.error("Failed to register FCM token:", err);
     }

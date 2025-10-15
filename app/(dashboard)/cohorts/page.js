@@ -36,6 +36,7 @@ function CohortsPage() {
   });
 
   // Fetch cohorts
+  console.info('cohortuser', user)
   const fetchCohorts = async () => {
     try {
       const response = await cohortService.getCohortsBySchool(user.school);

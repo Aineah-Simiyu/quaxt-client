@@ -31,6 +31,7 @@
     "@schedule-x/calendar": "^3.2.0",
     "@schedule-x/react": "^3.2.0",
     "@schedule-x/theme-shadcn": "^3.2.0",
+    "@tanstack/react-table": "^8.21.3",
     "axios": "^1.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

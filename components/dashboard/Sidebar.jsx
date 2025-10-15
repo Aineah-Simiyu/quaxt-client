@@ -123,7 +123,7 @@ export default function Sidebar({ onClose }) {
   });
 
   // Debug: Show current navigation items
-  console.log("Sidebar Debug - Final navItems:", navItems);
+  
 
   return (
     <div className="flex h-full w-64 flex-col bg-white border-r border-slate-200">

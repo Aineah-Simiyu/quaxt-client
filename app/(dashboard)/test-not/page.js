@@ -8,7 +8,7 @@ export default function PushButton() {
   const getToken = async () => {
     if (!ready) return;
     const token = await client.getToken(); // v2 instance method
-    console.log('Got v2 token:', token);
+    
   };
 
   return (

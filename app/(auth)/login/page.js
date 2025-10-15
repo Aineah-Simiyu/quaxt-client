@@ -46,12 +46,12 @@ export default function LoginPage() {
 	const getToken = async () => {
 		if (!ready) return;
 		const token = await client.getToken(); // v2 instance method
-		console.log('Got v2 token:', token);
+		
 	};
 
 	const registerUserToken = async (token) => {
 		try {
-			console.log("Registering token with server:", token.substring(0, 20) + "...");
+			
 			const newRes = await apiClient.post("/fcm-tokens", {
 				token,
 				deviceType: "web",
@@ -61,7 +61,7 @@ export default function LoginPage() {
 				throw new Error(`HTTP ${newRes.status}: ${newRes.statusText}`);
 			}
 
-			console.log("Token registered successfully");
+			
 		} catch (err) {
 			console.error("Failed to register FCM token:", err);
 		}

@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils';
 import { ArrowLeft, Calendar, Clock, Download, Upload, CheckCircle, AlertCircle, Users, FileText, Star, Edit, Trash2, MoreHorizontal, TrendingUp, Award, Target, BookOpen, Eye, MessageSquare, BarChart3, GraduationCap, Settings, Shield, Filter, ExternalLink, X } from 'lucide-react';
-import { FILE_UPLOAD } from '@/lib/constants';
+import {FILE_UPLOAD, isInstructor} from '@/lib/constants';
 
 export default function AssignmentDetailPage() {
   const { id } = useParams();
@@ -404,8 +404,8 @@ export default function AssignmentDetailPage() {
         try {
           const uploadResponses = await fileService.uploadFiles(selectedFiles);
           submissionData.content.files = uploadResponses.map(response => response.data.file);
-          // console.log('handleSubmit - uploadResponses:', uploadResponses);
-          // console.log('handleSubmit - mapped files:', submissionData.content.files);
+          // 
+          // 
         } catch (uploadError) {
           toast({
             variant: "destructive",
@@ -417,7 +417,7 @@ export default function AssignmentDetailPage() {
         }
       }
       
-      console.log('handleSubmit - final submissionData:', JSON.stringify(submissionData, null, 2));
+      
       
       // Submit or update the assignment
       let result;
@@ -479,7 +479,7 @@ export default function AssignmentDetailPage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header Section */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center flex-wrap gap-4 justify-between mb-6">
             <Button 
               variant="outline" 
               size="sm" 
@@ -498,7 +498,7 @@ export default function AssignmentDetailPage() {
                 <span className="text-sm font-medium text-slate-700">{roleConfig.title}</span>
               </div>
               
-              {isInstructorOrAdmin && (
+              {isInstructor(user) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="text-slate-600 hover:text-slate-900 border-slate-300 bg-white shadow-sm">
@@ -1436,19 +1436,19 @@ export default function AssignmentDetailPage() {
                     </div>
                   )}
                   
-                  {/* Edit button for submitted (but not graded) assignments */}
-                  {submission?.status === 'submitted' && !isOverdue && (
-                    <div className="pt-4 border-t">
-                      <Button 
-                        variant="outline" 
-                        onClick={handleEditSubmission}
-                        className="w-full"
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Submission
-                      </Button>
-                    </div>
-                  )}
+                  {/*/!* Edit button for submitted (but not graded) assignments *!/*/}
+                  {/*{submission?.status === 'submitted' && !isOverdue && (*/}
+                  {/*  <div className="pt-4 border-t">*/}
+                  {/*    <Button */}
+                  {/*      variant="outline" */}
+                  {/*      onClick={handleEditSubmission}*/}
+                  {/*      className="w-full"*/}
+                  {/*    >*/}
+                  {/*      <Edit className="h-4 w-4 mr-2" />*/}
+                  {/*      Edit Submission*/}
+                  {/*    </Button>*/}
+                  {/*  </div>*/}
+                  {/*)}*/}
                 </div>
               ) : !isOverdue ? (
                 <div className="space-y-6">

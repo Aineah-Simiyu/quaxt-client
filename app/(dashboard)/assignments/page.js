@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, Filter, FileText, Calendar, Clock, CheckCircle2, AlertCircle, Users, XCircle, Grid3X3, List } from 'lucide-react';
-import { ROLES, isInstructorOrAdmin } from '@/lib/constants';
+import {ROLES, isInstructorOrAdmin, isInstructor} from '@/lib/constants';
 
 export default function AssignmentsPage() {
 	const { user } = useAuth();
@@ -28,12 +28,7 @@ export default function AssignmentsPage() {
 		const fetchData = async () => {
 			try {
 				setLoading(true);
-				console.log('Current user:', user);
-				console.log('User role:', user?.role);
-				
-				// Don't fetch if user is not loaded yet
 				if (!user) {
-					console.log('User not loaded yet, skipping fetch');
 					setLoading(false);
 					return;
 				}
@@ -47,13 +42,7 @@ export default function AssignmentsPage() {
 				if (user?.role === 'student') {
 					try {
 						const userProfile = await userService.getCurrentProfile();
-						console.log('Full user profile response:', userProfile);
-						console.log('User profile data path:', userProfile?.data);
-						console.log('User object:', userProfile?.data?.user); // Fixed: removed extra .data
-						console.log('Submitted assignments from API:', userProfile?.data?.user?.submittedAssignments); // Fixed path
-						
 						const userSubmittedAssignments = userProfile?.data?.user?.submittedAssignments || []; // Fixed path
-						console.log('Setting submitted assignments to:', userSubmittedAssignments);
 						setSubmittedAssignments(userSubmittedAssignments);
 					} catch (userError) {
 						console.error('User profile fetch error:', userError);
@@ -80,9 +69,6 @@ export default function AssignmentsPage() {
 	
 	// Helper function to check if assignment is submitted (for students)
 	const isAssignmentSubmitted = (assignmentId) => {
-		console.log('Checking submission for:', assignmentId);
-		console.log('Submitted assignments:', submittedAssignments);
-		console.log('Is submitted:', submittedAssignments.includes(assignmentId));
 		return submittedAssignments.includes(assignmentId);
 	};
 	
@@ -200,7 +186,7 @@ export default function AssignmentsPage() {
 		<div className="min-h-screen bg-slate-50">
 			<div className="max-w-7xl mx-auto px-6 py-8">
 				{/* Header Section */}
-				<div className="flex items-center justify-between mb-8">
+				<div className="flex flex-wrap gap-4 items-center justify-between mb-8">
 					<div>
 						<h1 className="text-3xl font-light text-slate-900 tracking-tight">
 							Assignments
@@ -209,7 +195,7 @@ export default function AssignmentsPage() {
 							{assignmentData.length} active assignments • Manage deliverables and timelines
 						</p>
 					</div>
-					{isInstructorOrAdmin(user) && (
+					{isInstructor(user) && (
 						<Button
 							asChild
 							className="bg-slate-900 hover:bg-slate-800 text-white border-0 shadow-sm font-medium px-4 py-2 h-9"
@@ -223,7 +209,7 @@ export default function AssignmentsPage() {
 				
 				{/* Search and Controls */}
 				<div className="bg-white border border-slate-200 rounded-lg p-4 mb-6 shadow-sm">
-					<div className="flex items-center justify-between">
+					<div className="flex flex-wrap gap-4 items-center justify-between">
 						<div className="relative w-80">
 							<Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
 							<Input
@@ -498,7 +484,7 @@ export default function AssignmentsPage() {
 								</div>
 							</div>
 						) : (
-							<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+							<div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
 								{filteredAssignments.map((assignment) => {
 									const status = getAssignmentStatus(assignment);
 									const isSubmitted = status === 'submitted';
@@ -649,10 +635,6 @@ export default function AssignmentsPage() {
 					<div className="flex items-center space-x-6">
 						<span>{filteredAssignments.length} Assignments displayed</span>
 						<span>Updated {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-					</div>
-					<div className="flex items-center space-x-4">
-						<button className="hover:text-slate-900 font-medium">Export List</button>
-						<button className="hover:text-slate-900 font-medium">Print View</button>
 					</div>
 				</div>
 			</div>

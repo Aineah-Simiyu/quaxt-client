@@ -12,13 +12,13 @@ export function AgendaView({
 }) {
   // Show events for the next days based on constant
   const days = useMemo(() => {
-    console.log("Agenda view updating with date:", currentDate.toISOString());
+    
     return Array.from({ length: AgendaDaysToShow }, (_, i) => addDays(new Date(currentDate), i));
   }, [currentDate]);
 
   const handleEventClick = (event, e) => {
     e.stopPropagation();
-    console.log("Agenda view event clicked:", event);
+    
     onEventSelect(event);
   };
 

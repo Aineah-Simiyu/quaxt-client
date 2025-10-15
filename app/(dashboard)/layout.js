@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import {useState, useEffect, Suspense} from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }) {
 
       {/* Mobile Sidebar */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-999 h-dvh md:hidden">
           <div className="absolute inset-0 bg-black/20" onClick={() => setSidebarOpen(false)} />
           <div className="relative">
             <Sidebar onClose={() => setSidebarOpen(false)} />
@@ -72,9 +72,11 @@ export default function DashboardLayout({ children }) {
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto space-y-4">
+            <Suspense fallback={<div>Loading...</div>}>
             {children}
+            </Suspense>
           </div>
         </main>
       </div>

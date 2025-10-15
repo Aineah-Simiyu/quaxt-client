@@ -120,7 +120,7 @@ export function EventCalendar({
   };
 
   const handleEventSelect = (event) => {
-    console.log("Event selected:", event); // Debug log
+    
     setSelectedEvent(event);
     setIsEventDialogOpen(true);
   };
@@ -129,7 +129,7 @@ export function EventCalendar({
     if (readOnly) {
       return;
     }
-    console.log("Creating new event at:", startTime); // Debug log
+    
 
     // Snap to 15-minute intervals
     const minutes = startTime.getMinutes();

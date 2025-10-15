@@ -61,7 +61,7 @@ import { withAuth } from "@/middleware/withAuth";
 import { userService, cohortService, analyticsService } from "@/lib/api";
 
 function StudentsPage() {
-  const { user } = useAuth();
+  let { user } = useAuth();
   const [students, setStudents] = useState([]);
   const [cohorts, setCohorts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ function StudentsPage() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmails, setInviteEmails] = useState("");
   const [inviteCohort, setInviteCohort] = useState("");
-
+  
   // Manual student creation state
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createStudentData, setCreateStudentData] = useState({
@@ -228,7 +228,6 @@ function StudentsPage() {
   const fetchStudents = async () => {
     try {
       let studentsData = [];
-
       if (isSchoolAdmin(user)) {
         // For school admins, get all students and enrich with cohort data
         const [studentsResponse, cohortsResponse] = await Promise.all([
@@ -751,7 +750,7 @@ function StudentsPage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header Section */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-4 ">
             <div>
               <h1 className="text-3xl font-light text-slate-900 tracking-tight">
                 Students
@@ -871,7 +870,7 @@ function StudentsPage() {
         {/* Main Content */}
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4 ">
               <div>
                 <CardTitle className="text-xl font-medium text-slate-900">
                   Student Directory
@@ -881,7 +880,7 @@ function StudentsPage() {
                 </CardDescription>
               </div>
               {isSchoolAdmin(user) && (
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 flex-wrap gap-4">
                   <Dialog
                     open={isCreateDialogOpen}
                     onOpenChange={setIsCreateDialogOpen}

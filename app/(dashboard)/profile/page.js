@@ -42,6 +42,7 @@ import {
   Loader2,
   Phone,
 } from "lucide-react";
+import Image from 'next/image'
 
 // ... (rest of imports and schemas unchanged)
 const profileSchema = z.object({
@@ -528,7 +529,7 @@ export default function ProfilePage() {
             Manage your account information and preferences
           </p>
         </div>
-        <div className="grid lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Profile Overview Sidebar */}
           <div className="lg:col-span-4">
             <Card className="bg-white border border-slate-200 shadow-sm">
@@ -625,7 +626,7 @@ export default function ProfilePage() {
           {/* Main Content */}
           <div className="lg:col-span-8">
             <Tabs defaultValue="account" className="space-y-6">
-              <TabsList className="bg-white border border-slate-200 p-1 h-auto shadow-sm">
+              <TabsList className="bg-white border border-slate-200 p-1 h-auto shadow-sm flex flex-wrap">
                 <TabsTrigger
                   value="account"
                   className="data-[state=active]:bg-slate-900 data-[state=active]:text-white text-slate-600 font-medium px-4 py-2 h-9"
