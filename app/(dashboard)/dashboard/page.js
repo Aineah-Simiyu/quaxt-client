@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { userService } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,24 +21,14 @@ import KPIStatCard from "@/components/dashboard/KPIStatCard";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const data = await userService.getDashboardData();
-        setDashboardData(data?.data || null);
-      } catch (error) {
-        console.error('Dashboard data fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, []);
+  const { data: dashboardResp, isLoading: loading } = useQuery({
+    queryKey: ['dashboard', user?._id, user?.role],
+    enabled: !!user,
+    queryFn: async () => {
+      const resp = await userService.getDashboardData();
+      return resp?.data || resp;
+    },
+  });
 
   if (loading) {
     return (
@@ -50,7 +41,7 @@ export default function DashboardPage() {
   }
 
   // Extract data from API response with fallback defaults
-  const data = dashboardData || {
+  const data = dashboardResp || {
     recentAssignments: [],
     stats: {
       totalAssignments: 0,
@@ -180,8 +171,8 @@ export default function DashboardPage() {
               </>
           )}
         </div>
-        {user.role === ROLES.TRAINER && (<RecentSubmissions submissions={dashboardData?.recentActivity?.recentSubmissions || {}}/>)}
-        {user.role === ROLES.SCHOOL_ADMIN && (<RecentAssignments assignments={dashboardData.recentActivity.recentAssignments || {}}/>)}
+        {user.role === ROLES.TRAINER && (<RecentSubmissions submissions={data?.recentActivity?.recentSubmissions || {}}/>)}
+        {user.role === ROLES.SCHOOL_ADMIN && (<RecentAssignments assignments={data?.recentActivity?.recentAssignments || {}}/>)}
         
       </div>
     </div>
