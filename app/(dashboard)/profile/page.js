@@ -1135,9 +1135,11 @@ export default function ProfilePage() {
                   Scan this QR code using WhatsApp on your phone:
                 </p>
                 <div className="flex justify-center">
-                  <img
+                  <Image
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCode)}`}
                     alt="WhatsApp QR Code"
+                    width={250}
+                    height={250}
                     className="w-60 h-60"
                   />
                 </div>
