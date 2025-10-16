@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +25,7 @@ export default function AssignmentDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [assignment, setAssignment] = useState(null);
   const [submission, setSubmission] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -84,120 +86,70 @@ export default function AssignmentDetailPage() {
   // Check if current assignment is overdue
   const isOverdue = assignment ? isAssignmentOverdue(assignment.dueDate) : false;
 
-  useEffect(() => {
-    const fetchAssignment = async () => {
-      try {
-        setLoading(true);
-        // Fetch the assignment data from the API
-        const data = await assignmentService.getAssignment(id);
-        setAssignment(data);
-        
-        if (isInstructorOrAdmin) {
-          // For instructors/admins, fetch all submissions for this assignment
-          try {
-            const submissionsData = await assignmentService.getSubmissions(id);
-            setSubmissions(submissionsData || []);
-            
-            // Fetch analytics data
-            try {
-              const analyticsData = await assignmentService.getAssignmentAnalytics(id);
-              setAnalytics(analyticsData);
-            } catch (analyticsError) {
-              console.error('Analytics fetch error:', analyticsError);
-            }
-          } catch (submissionError) {
-            console.error('Submissions fetch error:', submissionError);
-            setSubmissions([]);
-          }
-        } else if (isStudent) {
-          // For students, check if the assignment already includes submission data
-          if (data.submission) {
-            // Use the submission data already included in the assignment response
-            setSubmission(data.submission);
-          } else if (data.gradedSubmissions && data.gradedSubmissions.length > 0) {
-            // Fallback: check if there's a graded submission in the gradedSubmissions array
-            const gradedSubmission = data.gradedSubmissions.find(sub => sub.student === user.id);
-            if (gradedSubmission) {
-              setSubmission(gradedSubmission);
-            } else {
-              // Try to fetch their submission for this assignment
-              try {
-                const submissions = await assignmentService.getSubmissions(id, { 
-                  studentId: user.id 
-                });
-                
-                if (submissions && submissions.length > 0) {
-                  setSubmission(submissions[0]);
-                } else {
-                  // No submission yet
-                  setSubmission({
-                    status: 'draft',
-                    submittedAt: null,
-                    grade: null,
-                    feedback: null,
-                    files: [],
-                  });
-                }
-              } catch (submissionError) {
-                console.error('Submission fetch error:', submissionError);
-                // Initialize with empty submission
-                setSubmission({
-                  status: 'draft',
-                  submittedAt: null,
-                  grade: null,
-                  feedback: null,
-                  files: [],
-                });
-              }
-            }
-          } else {
-            // Try to fetch their submission for this assignment
-            try {
-              const submissions = await assignmentService.getSubmissions(id, { 
-                studentId: user.id 
-              });
-              
-              if (submissions && submissions.length > 0) {
-                setSubmission(submissions[0]);
-              } else {
-                // No submission yet
-                setSubmission({
-                  status: 'draft',
-                  submittedAt: null,
-                  grade: null,
-                  feedback: null,
-                  files: [],
-                });
-              }
-            } catch (submissionError) {
-              console.error('Submission fetch error:', submissionError);
-              // Initialize with empty submission
-              setSubmission({
-                status: 'draft',
-                submittedAt: null,
-                grade: null,
-                feedback: null,
-                files: [],
-              });
-            }
-          }
-        }
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load assignment"
-        });
-        console.error('Assignment fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // React Query: assignment data
+  const assignmentQuery = useQuery({
+    queryKey: ['assignment', id],
+    enabled: !!id,
+    queryFn: () => assignmentService.getAssignment(id),
+  });
 
-    if (id) {
-      fetchAssignment();
+  // React Query: instructor/admin submissions and analytics
+  const submissionsQuery = useQuery({
+    queryKey: ['assignment', id, 'submissions'],
+    enabled: !!id && isInstructorOrAdmin,
+    queryFn: () => assignmentService.getSubmissions(id),
+  });
+
+  const analyticsQuery = useQuery({
+    queryKey: ['assignment', id, 'analytics'],
+    enabled: !!id && isInstructorOrAdmin,
+    queryFn: () => assignmentService.getAssignmentAnalytics(id),
+  });
+
+  // React Query: student submission
+  const mySubmissionQuery = useQuery({
+    queryKey: ['assignment', id, 'mySubmission', user?.id],
+    enabled: !!id && isStudent && !!user?.id,
+    queryFn: () => assignmentService.getSubmissions(id, { studentId: user.id }),
+  });
+
+  // Sync query data into local state as before (minimal UI changes)
+  useEffect(() => {
+    if (assignmentQuery.data) setAssignment(assignmentQuery.data);
+  }, [assignmentQuery.data]);
+
+  useEffect(() => {
+    if (isInstructorOrAdmin) {
+      if (submissionsQuery.data) setSubmissions(submissionsQuery.data || []);
+      if (analyticsQuery.data) setAnalytics(analyticsQuery.data || null);
     }
-  }, [id, user]);
+  }, [isInstructorOrAdmin, submissionsQuery.data, analyticsQuery.data]);
+
+  useEffect(() => {
+    if (isStudent && assignment) {
+      if (assignment.submission) {
+        setSubmission(assignment.submission);
+        return;
+      }
+      if (assignment.gradedSubmissions && assignment.gradedSubmissions.length > 0) {
+        const gradedSubmission = assignment.gradedSubmissions.find(sub => sub.student === user.id);
+        if (gradedSubmission) {
+          setSubmission(gradedSubmission);
+          return;
+        }
+      }
+      if (mySubmissionQuery.data) {
+        const arr = mySubmissionQuery.data || [];
+        if (arr.length > 0) setSubmission(arr[0]);
+        else setSubmission({ status: 'draft', submittedAt: null, grade: null, feedback: null, files: [] });
+      }
+    }
+  }, [isStudent, assignment, mySubmissionQuery.data, user]);
+
+  useEffect(() => {
+    const l = assignmentQuery.isLoading || (isInstructorOrAdmin && (submissionsQuery.isLoading || analyticsQuery.isLoading)) || (isStudent && mySubmissionQuery.isLoading);
+    setLoading(!!l);
+  }, [assignmentQuery.isLoading, submissionsQuery.isLoading, analyticsQuery.isLoading, mySubmissionQuery.isLoading, isInstructorOrAdmin, isStudent]);
 
   // Prefill form fields when submission data is loaded or when entering edit mode
   useEffect(() => {
@@ -318,58 +270,65 @@ export default function AssignmentDetailPage() {
     setSubmissionLinks(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleGradeSubmission = async (submissionId, grade, feedback) => {
-    try {
-      await assignmentService.gradeSubmission(submissionId, { grade, feedback });
-      
-      // Update submissions list
-      setSubmissions(prev => prev.map(sub => 
-        sub.id === submissionId 
-          ? { ...sub, grade, feedback, gradedAt: new Date().toISOString() }
-          : sub
-      ));
-      
+  const gradeMutation = useMutation({
+    mutationFn: ({ submissionId, grade, feedback }) => assignmentService.gradeSubmission(submissionId, { grade, feedback }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'submissions'] });
       setGradingSubmission(null);
-      
-      toast({
-        title: "Success",
-        description: "Submission graded successfully"
-      });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to grade submission"
-      });
-      console.error('Grading error:', error);
-    }
+      toast({ title: 'Success', description: 'Submission graded successfully' });
+    },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to grade submission' });
+    },
+  });
+
+  const handleGradeSubmission = async (submissionId, grade, feedback) => {
+    await gradeMutation.mutateAsync({ submissionId, grade, feedback });
   };
 
-  const handleDeleteAssignment = async () => {
-    if (!confirm("Are you sure you want to delete this assignment? This action cannot be undone.")) {
-      return;
-    }
-    
-    try {
-      await assignmentService.deleteAssignment(id);
-      toast({
-        title: "Success",
-        description: "Assignment deleted successfully"
-      });
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: () => assignmentService.deleteAssignment(id),
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Assignment deleted successfully' });
+      qc.invalidateQueries({ queryKey: ['assignments'] });
       router.push('/assignments');
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to delete assignment"
-      });
-      console.error('Delete error:', error);
-    }
+    },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete assignment' });
+    },
+  });
+
+  const handleDeleteAssignment = async () => {
+    if (!confirm("Are you sure you want to delete this assignment? This action cannot be undone.")) return;
+    await deleteAssignmentMutation.mutateAsync();
   };
 
   const hasSubmissionContent = () => {
     return submissionText.trim().length > 0 || selectedFiles.length > 0 || submissionLinks.some(link => link.url.trim().length > 0);
   };
+
+  const submitMutation = useMutation({
+    mutationFn: ({ isEdit, submissionId, submissionData }) => {
+      return isEdit && submissionId
+        ? assignmentService.updateSubmission(submissionId, submissionData)
+        : assignmentService.submitAssignment(id, submissionData);
+    },
+    onSuccess: (result) => {
+      setSubmission(result);
+      setSelectedFiles([]);
+      setSubmissionText('');
+      setSubmissionLinks([]);
+      setIsEditingSubmission(false);
+      qc.invalidateQueries({ queryKey: ['assignment', id] });
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'mySubmission', user?.id] });
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'submissions'] });
+      toast({ title: 'Success', description: isEditingSubmission ? 'Assignment updated successfully' : 'Assignment submitted successfully' });
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Submission failed', description: error?.message || 'Failed to submit assignment' });
+    },
+    onSettled: () => setSubmitting(false),
+  });
 
   const handleSubmit = async () => {
     if (!hasSubmissionContent()) {
@@ -416,39 +375,11 @@ export default function AssignmentDetailPage() {
           return;
         }
       }
-      
-      
-      
-      // Submit or update the assignment
-      let result;
-      if (isEditingSubmission && submission?._id) {
-        // Update existing submission using PUT
-        result = await assignmentService.updateSubmission(submission._id, submissionData);
-      } else {
-        // Create new submission using POST
-        result = await assignmentService.submitAssignment(id, submissionData);
-      }
-      
-      // Update submission status
-      setSubmission(result);
-      setSelectedFiles([]);
-      setSubmissionText('');
-      setSubmissionLinks([]);
-      setIsEditingSubmission(false);
-      
-      toast({
-        title: "Success",
-        description: isEditingSubmission ? "Assignment updated successfully" : "Assignment submitted successfully"
-      });
+      await submitMutation.mutateAsync({ isEdit: isEditingSubmission, submissionId: submission?._id, submissionData });
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Submission failed",
-        description: error.message || "Failed to submit assignment"
-      });
       console.error('Submission error:', error);
     } finally {
-      setSubmitting(false);
+      // handled in onSettled
     }
   };
 
