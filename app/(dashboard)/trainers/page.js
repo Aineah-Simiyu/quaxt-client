@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import {
   Card,
@@ -70,9 +71,7 @@ import { userService, cohortService } from "@/lib/api";
 
 function TrainersPage() {
   const { user } = useAuth();
-  const [trainers, setTrainers] = useState([]);
-  const [cohorts, setCohorts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,102 +108,78 @@ function TrainersPage() {
   const [bulkUploadCohort, setBulkUploadCohort] = useState("");
   const [bulkUploadLoading, setBulkUploadLoading] = useState(false);
 
-  // Fetch trainers with their cohorts
-  const fetchTrainers = async () => {
-    try {
-      const response = await userService.getUsersBySchoolAndRole(
+  // React Query: trainers with assigned cohorts
+  const trainersQuery = useQuery({
+    queryKey: ["trainers", user?.school],
+    enabled: !!user?.school,
+    queryFn: async () => {
+      const res = await userService.getUsersBySchoolAndRole(
         user.school,
         ROLES.TRAINER,
       );
-      const trainersData = response.data || [];
-
-      // Fetch cohorts for each trainer
-      const trainersWithCohorts = await Promise.all(
+      const trainersData = Array.isArray(res) ? res : res?.data || [];
+      const withCohorts = await Promise.all(
         trainersData.map(async (trainer) => {
           try {
-            const cohortResponse = await cohortService.getCohortsByTrainer(
-              trainer._id,
-            );
-            return { ...trainer, assignedCohorts: cohortResponse.data || [] };
-          } catch (error) {
-            console.error(
-              `Error fetching cohorts for trainer ${trainer._id}:`,
-              error,
-            );
+            const cr = await cohortService.getCohortsByTrainer(trainer._id);
+            const assigned = Array.isArray(cr) ? cr : cr?.data || [];
+            return { ...trainer, assignedCohorts: assigned };
+          } catch (e) {
+            console.error(`Error fetching cohorts for trainer ${trainer._id}:`, e);
             return { ...trainer, assignedCohorts: [] };
           }
         }),
       );
+      return withCohorts;
+    },
+  });
 
-      setTrainers(trainersWithCohorts);
-    } catch (error) {
-      console.error("Error fetching trainers:", error);
-      toast.error("Failed to fetch team members");
-    }
-  };
-
-  // Fetch cohorts
-  const fetchCohorts = async () => {
-    try {
-      const response = await cohortService.getCohortsBySchool(user.school);
-      setCohorts(response.data || []);
-    } catch (error) {
-      console.error("Error fetching cohorts:", error);
-      toast.error("Failed to fetch cohorts");
-    }
-  };
-
-  useEffect(() => {
-    if (user?.school) {
-      Promise.all([fetchTrainers(), fetchCohorts()]).finally(() => {
-        setLoading(false);
-      });
-    }
-  }, [user]);
+  // React Query: cohorts by school
+  const cohortsQuery = useQuery({
+    queryKey: ["cohorts", user?.school],
+    enabled: !!user?.school,
+    queryFn: async () => {
+      const res = await cohortService.getCohortsBySchool(user.school);
+      return Array.isArray(res) ? res : res?.data || [];
+    },
+  });
 
   // Handle invite trainer
-  const handleInviteTrainer = async (e) => {
-    e.preventDefault();
-    try {
-      await userService.inviteUser({
-        ...inviteForm,
-        schoolId: user.school,
-      });
-
+  const inviteTrainerMutation = useMutation({
+    mutationFn: (payload) => userService.inviteUser(payload),
+    onSuccess: () => {
       toast.success("Team member invitation sent successfully");
       setIsInviteDialogOpen(false);
-      setInviteForm({
-        email: "",
-        firstName: "",
-        lastName: "",
-        role: ROLES.TRAINER,
-      });
-      fetchTrainers();
-    } catch (error) {
-      console.error("Error inviting trainer:", error);
-      toast.error(error.response?.data?.message || "Failed to send invitation");
-    }
+      setInviteForm({ email: "", firstName: "", lastName: "", role: ROLES.TRAINER });
+      qc.invalidateQueries({ queryKey: ["trainers", user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || "Failed to send invitation");
+    },
+  });
+
+  const handleInviteTrainer = async (e) => {
+    e.preventDefault();
+    await inviteTrainerMutation.mutateAsync({ ...inviteForm, schoolId: user.school });
   };
 
   // Handle create trainer
-  const handleCreateTrainer = async (e) => {
-    e.preventDefault();
-    try {
-      await userService.createTrainer({
-        ...createForm,
-        schoolId: user.school,
-      });
-
+  const createTrainerMutation = useMutation({
+    mutationFn: (payload) => userService.createTrainer(payload),
+    onSuccess: () => {
       toast.success("Team member created successfully");
       setIsCreateDialogOpen(false);
       setCreateForm({ email: "", firstName: "", lastName: "", password: "" });
-      fetchTrainers();
-    } catch (error) {
-      console.error("Error creating trainer:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to create team member",
-      );
-    }
+      qc.invalidateQueries({ queryKey: ["trainers", user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || "Failed to create team member");
+    },
+  });
+
+  const handleCreateTrainer = async (e) => {
+    e.preventDefault();
+    await createTrainerMutation.mutateAsync({ ...createForm, schoolId: user.school });
   };
 
   // Handle assign trainer to cohorts
@@ -239,7 +214,7 @@ function TrainersPage() {
       setIsAssignDialogOpen(false);
       setAssignForm({ cohortIds: [] });
       setSelectedTrainer(null);
-      fetchTrainers(); // Refresh to show updated assignments
+      qc.invalidateQueries({ queryKey: ["trainers", user?.school] });
     } catch (error) {
       console.error("Error updating trainer assignments:", error);
       toast.error("Failed to update assignments");
@@ -247,6 +222,27 @@ function TrainersPage() {
   };
 
   // Handle bulk upload of trainers
+  const bulkUploadMutation = useMutation({
+    mutationFn: ({ file, cohortId }) => userService.bulkUploadTrainers(file, cohortId),
+    onSuccess: (response) => {
+      const { successful, failed, total } = response.data || response || {};
+      if (failed > 0) {
+        toast.success(`Bulk upload completed: ${successful}/${total} trainers added successfully. ${failed} failed.`);
+      } else {
+        toast.success(`Successfully uploaded ${successful} trainers to the cohort!`);
+      }
+      setIsBulkUploadDialogOpen(false);
+      setBulkUploadFile(null);
+      setBulkUploadCohort("");
+      qc.invalidateQueries({ queryKey: ["trainers", user?.school] });
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || "Failed to upload trainers";
+      toast.error(errorMessage);
+    },
+    onSettled: () => setBulkUploadLoading(false),
+  });
+
   const handleBulkUpload = async () => {
     if (!bulkUploadFile || !bulkUploadCohort) {
       toast.error("Please select a CSV file and choose a cohort");
@@ -269,40 +265,7 @@ function TrainersPage() {
     }
 
     setBulkUploadLoading(true);
-
-    try {
-      const response = await userService.bulkUploadTrainers(
-        bulkUploadFile,
-        bulkUploadCohort,
-      );
-
-      const { successful, failed, total } = response.data;
-
-      if (failed > 0) {
-        toast.success(
-          `Bulk upload completed: ${successful}/${total} trainers added successfully. ${failed} failed.`,
-        );
-      } else {
-        toast.success(
-          `Successfully uploaded ${successful} trainers to the cohort!`,
-        );
-      }
-
-      // Reset form and close modal
-      setIsBulkUploadDialogOpen(false);
-      setBulkUploadFile(null);
-      setBulkUploadCohort("");
-
-      // Refresh trainers list
-      fetchTrainers();
-    } catch (error) {
-      console.error("Error during bulk upload:", error);
-      const errorMessage =
-        error.response?.data?.message || "Failed to upload trainers";
-      toast.error(errorMessage);
-    } finally {
-      setBulkUploadLoading(false);
-    }
+    await bulkUploadMutation.mutateAsync({ file: bulkUploadFile, cohortId: bulkUploadCohort });
   };
 
   // Handle file selection for bulk upload
@@ -314,22 +277,27 @@ function TrainersPage() {
   };
 
   // Handle delete trainer
+  const deleteTrainerMutation = useMutation({
+    mutationFn: (trainerId) => userService.deleteUser(trainerId),
+    onSuccess: () => {
+      toast.success("Team member removed successfully");
+      qc.invalidateQueries({ queryKey: ["trainers", user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || "Failed to remove team member");
+    },
+  });
+
   const handleDeleteTrainer = async (trainerId) => {
     if (!confirm("Are you sure you want to remove this team member?")) return;
-
-    try {
-      await userService.deleteUser(trainerId);
-      toast.success("Team member removed successfully");
-      fetchTrainers();
-    } catch (error) {
-      console.error("Error deleting trainer:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to remove team member",
-      );
-    }
+    await deleteTrainerMutation.mutateAsync(trainerId);
   };
 
   // Filter and search trainers
+  const trainers = trainersQuery.data || [];
+  const cohorts = cohortsQuery.data || [];
+  const loading = trainersQuery.isLoading || cohortsQuery.isLoading;
+
   const filteredTrainers = useMemo(() => {
     return trainers.filter((trainer) => {
       const matchesSearch =
