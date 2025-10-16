@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -20,6 +21,7 @@ export default function SubmissionReviewPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [assignment, setAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
@@ -29,39 +31,41 @@ export default function SubmissionReviewPage() {
   const [feedback, setFeedback] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
 
-  useEffect(() => {
-    fetchAssignmentAndSubmissions();
-  }, [params.id]);
+  // Queries
+  const assignmentQuery = useQuery({
+    queryKey: ['assignment', params.id],
+    enabled: !!params.id,
+    queryFn: () => assignmentService.getAssignment(params.id),
+  });
 
-  const fetchAssignmentAndSubmissions = async () => {
-    try {
-      setLoading(true);
-      const [assignmentData, submissionsData] = await Promise.all([
-        assignmentService.getAssignment(params.id),
-        assignmentService.getSubmissions(params.id)
-      ]);
-      
-      setAssignment(assignmentData);
-      setSubmissions(submissionsData || []);
-      
-      // Auto-select first submission if available
-      if (submissionsData && submissionsData.length > 0) {
-        setSelectedSubmission(submissionsData[0]);
-        setGrade(submissionsData[0].grade?.score || '');
-        setFeedback(submissionsData[0].grade?.feedback || '');
-        setIsEditMode(submissionsData[0].status !== 'graded');
+  const submissionsQuery = useQuery({
+    queryKey: ['assignment', params.id, 'submissions'],
+    enabled: !!params.id,
+    queryFn: () => assignmentService.getSubmissions(params.id),
+  });
+
+  // Sync into local state for minimal UI changes
+  useEffect(() => {
+    if (assignmentQuery.data) setAssignment(assignmentQuery.data);
+  }, [assignmentQuery.data]);
+
+  useEffect(() => {
+    if (submissionsQuery.data) {
+      const list = submissionsQuery.data || [];
+      setSubmissions(list);
+      if (!selectedSubmission && list.length > 0) {
+        const first = list[0];
+        setSelectedSubmission(first);
+        setGrade(first.grade?.score || '');
+        setFeedback(first.grade?.feedback || '');
+        setIsEditMode(first.status !== 'graded');
       }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load assignment data',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [submissionsQuery.data, selectedSubmission]);
+
+  useEffect(() => {
+    setLoading(assignmentQuery.isLoading || submissionsQuery.isLoading);
+  }, [assignmentQuery.isLoading, submissionsQuery.isLoading]);
 
   const handleSubmissionSelect = (submission) => {
     setSelectedSubmission(submission);
@@ -75,30 +79,32 @@ export default function SubmissionReviewPage() {
     
     try {
       setGrading(true);
-      await assignmentService.gradeSubmission(selectedSubmission._id, {
+      await gradeMutation.mutateAsync({
+        submissionId: selectedSubmission._id,
         score: parseFloat(grade),
-        feedback
+        feedback,
       });
-      
-      toast({
-        title: 'Success',
-        description: selectedSubmission.status === 'graded' ? 'Changes submitted successfully' : 'Review submitted successfully',
-      });
-      
-      // Refresh submissions and exit edit mode
-      await fetchAssignmentAndSubmissions();
       setIsEditMode(false);
-    } catch (error) {
-      console.error('Error submitting review:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit review',
-        variant: 'destructive',
-      });
     } finally {
       setGrading(false);
     }
   };
+
+  const gradeMutation = useMutation({
+    mutationFn: ({ submissionId, score, feedback }) =>
+      assignmentService.gradeSubmission(submissionId, { score, feedback }),
+    onSuccess: () => {
+      toast({
+        title: 'Success',
+        description: 'Review submitted successfully',
+      });
+      qc.invalidateQueries({ queryKey: ['assignment', params.id, 'submissions'] });
+      qc.invalidateQueries({ queryKey: ['assignment', params.id] });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to submit review', variant: 'destructive' });
+    },
+  });
 
   const downloadFile = (fileUrl, fileName) => {
     const link = document.createElement('a');

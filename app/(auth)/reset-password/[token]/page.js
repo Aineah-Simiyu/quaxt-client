@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Lock, ArrowRight, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { apiClient, authService } from '@/lib/api';
 
 const formSchema = z.object({
 	password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
@@ -46,70 +48,51 @@ export default function ResetPasswordPage() {
 		},
 	});
 
-	// Verify token on component mount
-	useEffect(() => {
-		const verifyToken = async () => {
-			try {
-				const response = await fetch(`/api/auth/verify-reset-token/${token}`);
-				if (!response.ok) {
-					setIsValidToken(false);
-				}
-			} catch (error) {
-				console.error('Token verification error:', error);
-				setIsValidToken(false);
-			} finally {
-				setIsCheckingToken(false);
-			}
-		};
+	// Verify token via React Query
+	const verifyQuery = useQuery({
+		queryKey: ['verify-reset-token', token],
+		enabled: !!token,
+		queryFn: async () => {
+			const resp = await apiClient.get(`/auth/verify-reset-token/${token}`);
+			return resp?.data;
+		},
+	});
 
-		if (token) {
-			verifyToken();
-		} else {
+	useEffect(() => {
+		if (!token) {
 			setIsValidToken(false);
 			setIsCheckingToken(false);
+			return;
 		}
-	}, [token]);
+		setIsCheckingToken(verifyQuery.isLoading);
+		if (verifyQuery.isError) {
+			setIsValidToken(false);
+			return;
+		}
+		if (verifyQuery.data) {
+			setIsValidToken(Boolean(verifyQuery.data.success));
+		}
+	}, [token, verifyQuery.isLoading, verifyQuery.isError, verifyQuery.data]);
+
+	const resetMutation = useMutation({
+		mutationFn: (password) => authService.resetPassword(token, password),
+		onSuccess: () => {
+			setIsSuccess(true);
+			toast({ title: 'Password reset successful', description: 'Your password has been updated successfully.' });
+			setTimeout(() => router.push('/login'), 3000);
+		},
+		onError: (error) => {
+			const message = error?.response?.data?.message || error?.message || 'Failed to reset password. Please try again.';
+			toast({ title: 'Error', description: message, variant: 'destructive' });
+		},
+		onSettled: () => setIsLoading(false),
+	});
 
 	const onSubmit = async (values) => {
 		try {
 			setIsLoading(true);
-			
-			const response = await fetch('/api/auth/reset-password', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					token,
-					password: values.password,
-				}),
-			});
-
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || 'Failed to reset password');
-			}
-
-			setIsSuccess(true);
-			toast({
-				title: "Password reset successful",
-				description: "Your password has been updated successfully."
-			});
-
-			// Redirect to login after 3 seconds
-			setTimeout(() => {
-				router.push('/login');
-			}, 3000);
-		} catch (error) {
-			console.error('Reset password error:', error);
-			toast({
-				title: "Error",
-				description: error.message || "Failed to reset password. Please try again.",
-				variant: "destructive"
-			});
-		} finally {
-			setIsLoading(false);
-		}
+			await resetMutation.mutateAsync(values.password);
+		} catch (e) {}
 	};
 
 	if (isCheckingToken) {

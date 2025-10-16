@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useMutation } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Mail, Lock } from 'lucide-react';
-
+import { useNotifiq } from '@/providers/notificationProvider';
 import { Button } from '@/components/ui/button';
+import {apiClient} from '@/lib/api';
 import {
 	Form,
 	FormControl,
@@ -28,6 +30,7 @@ const formSchema = z.object({
 });
 
 export default function LoginPage() {
+	const { client, ready } = useNotifiq();
 	const [isLoading, setIsLoading] = useState(false);
 	const router = useRouter();
 	const { login } = useAuth();
@@ -40,25 +43,52 @@ export default function LoginPage() {
 			password: '',
 		},
 	});
+
+	const getToken = async () => {
+		if (!ready) return;
+		const token = await client.getToken(); // v2 instance method
+		
+	};
+
+	const registerUserToken = async (token) => {
+		try {
+			
+			const newRes = await apiClient.post("/fcm-tokens", {
+				token,
+				deviceType: "web",
+			});
+
+			if (!newRes.ok) {
+				throw new Error(`HTTP ${newRes.status}: ${newRes.statusText}`);
+			}
+
+			
+		} catch (err) {
+			console.error("Failed to register FCM token:", err);
+		}
+  };
 	
+	const loginMutation = useMutation({
+		mutationFn: (values) => login(values),
+		onSuccess: async (userData) => {
+			localStorage.clear();
+			if (!userData.mustChangePassword || !userData.emailVerified) {
+				const token = await client.getToken();
+				await registerUserToken(token);
+				router.replace('/dashboard');
+			}
+		},
+		onError: (error) => {
+			console.error('Login error:', error);
+		},
+		onSettled: () => setIsLoading(false),
+	});
+
 	const onSubmit = async (values) => {
 		try {
 			setIsLoading(true);
-			const userData = await login(values);
-			
-			
-			// Only redirect if user doesn't need to change password
-			if (!userData.mustChangePassword || !userData.emailVerified) {
-				router.replace('/dashboard');
-			}
-			// If mustChangePassword is true, AuthContext will handle the redirect
-			
-		} catch (error) {
-			console.error('Login error:', error);
-			// Error is handled in the AuthContext
-		} finally {
-			setIsLoading(false);
-		}
+			await loginMutation.mutateAsync(values);
+		} catch (e) {}
 	};
 	
 	return (

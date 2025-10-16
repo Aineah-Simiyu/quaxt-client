@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -18,12 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils';
 import { ArrowLeft, Calendar, Clock, Download, Upload, CheckCircle, AlertCircle, Users, FileText, Star, Edit, Trash2, MoreHorizontal, TrendingUp, Award, Target, BookOpen, Eye, MessageSquare, BarChart3, GraduationCap, Settings, Shield, Filter, ExternalLink, X } from 'lucide-react';
-import { FILE_UPLOAD } from '@/lib/constants';
+import {FILE_UPLOAD, isInstructor} from '@/lib/constants';
 
 export default function AssignmentDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [assignment, setAssignment] = useState(null);
   const [submission, setSubmission] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -36,6 +38,7 @@ export default function AssignmentDetailPage() {
   const [submissionLinks, setSubmissionLinks] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [gradingSubmission, setGradingSubmission] = useState(null);
+  const [isEditingSubmission, setIsEditingSubmission] = useState(false);
   const { toast } = useToast();
 
   // Role-based access control
@@ -43,7 +46,7 @@ export default function AssignmentDetailPage() {
   const isTrainer = user?.role === 'trainer';
   const isSchoolAdmin = user?.role === 'school_admin';
   const isInstructorOrAdmin = isTrainer || isSchoolAdmin;
-  
+
   // Get role-specific styling and icons
   const getRoleConfig = () => {
     if (isSchoolAdmin) {
@@ -72,78 +75,113 @@ export default function AssignmentDetailPage() {
   
   const roleConfig = getRoleConfig();
 
-  useEffect(() => {
-    const fetchAssignment = async () => {
-      try {
-        setLoading(true);
-        // Fetch the assignment data from the API
-        const data = await assignmentService.getAssignment(id);
-        setAssignment(data);
-        
-        if (isInstructorOrAdmin) {
-          // For instructors/admins, fetch all submissions for this assignment
-          try {
-            const submissionsData = await assignmentService.getSubmissions(id);
-            setSubmissions(submissionsData || []);
-            
-            // Fetch analytics data
-            try {
-              const analyticsData = await assignmentService.getAssignmentAnalytics(id);
-              setAnalytics(analyticsData);
-            } catch (analyticsError) {
-              console.error('Analytics fetch error:', analyticsError);
-            }
-          } catch (submissionError) {
-            console.error('Submissions fetch error:', submissionError);
-            setSubmissions([]);
-          }
-        } else if (isStudent) {
-          // For students, fetch their submission for this assignment
-          try {
-            const submissions = await assignmentService.getSubmissions(id, { 
-              studentId: user.id 
-            });
-            
-            if (submissions && submissions.length > 0) {
-              setSubmission(submissions[0]);
-            } else {
-              // No submission yet
-              setSubmission({
-                status: 'draft',
-                submittedAt: null,
-                grade: null,
-                feedback: null,
-                files: [],
-              });
-            }
-          } catch (submissionError) {
-            console.error('Submission fetch error:', submissionError);
-            // Initialize with empty submission
-            setSubmission({
-              status: 'draft',
-              submittedAt: null,
-              grade: null,
-              feedback: null,
-              files: [],
-            });
-          }
-        }
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load assignment"
-        });
-        console.error('Assignment fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Helper function to check if assignment is overdue
+  const isAssignmentOverdue = (dueDateString) => {
+    if (!dueDateString) return false;
+    const dueDate = new Date(dueDateString);
+    const today = new Date();
+    return today > dueDate;
+  };
 
-    if (id) {
-      fetchAssignment();
+  // Check if current assignment is overdue
+  const isOverdue = assignment ? isAssignmentOverdue(assignment.dueDate) : false;
+
+  // React Query: assignment data
+  const assignmentQuery = useQuery({
+    queryKey: ['assignment', id],
+    enabled: !!id,
+    queryFn: () => assignmentService.getAssignment(id),
+  });
+
+  // React Query: instructor/admin submissions and analytics
+  const submissionsQuery = useQuery({
+    queryKey: ['assignment', id, 'submissions'],
+    enabled: !!id && isInstructorOrAdmin,
+    queryFn: () => assignmentService.getSubmissions(id),
+  });
+
+  const analyticsQuery = useQuery({
+    queryKey: ['assignment', id, 'analytics'],
+    enabled: !!id && isInstructorOrAdmin,
+    queryFn: () => assignmentService.getAssignmentAnalytics(id),
+  });
+
+  // React Query: student submission
+  const mySubmissionQuery = useQuery({
+    queryKey: ['assignment', id, 'mySubmission', user?.id],
+    enabled: !!id && isStudent && !!user?.id,
+    queryFn: () => assignmentService.getSubmissions(id, { studentId: user.id }),
+  });
+
+  // Sync query data into local state as before (minimal UI changes)
+  useEffect(() => {
+    if (assignmentQuery.data) setAssignment(assignmentQuery.data);
+  }, [assignmentQuery.data]);
+
+  useEffect(() => {
+    if (isInstructorOrAdmin) {
+      if (submissionsQuery.data) setSubmissions(submissionsQuery.data || []);
+      if (analyticsQuery.data) setAnalytics(analyticsQuery.data || null);
     }
-  }, [id, user]);
+  }, [isInstructorOrAdmin, submissionsQuery.data, analyticsQuery.data]);
+
+  useEffect(() => {
+    if (isStudent && assignment) {
+      if (assignment.submission) {
+        setSubmission(assignment.submission);
+        return;
+      }
+      if (assignment.gradedSubmissions && assignment.gradedSubmissions.length > 0) {
+        const gradedSubmission = assignment.gradedSubmissions.find(sub => sub.student === user.id);
+        if (gradedSubmission) {
+          setSubmission(gradedSubmission);
+          return;
+        }
+      }
+      if (mySubmissionQuery.data) {
+        const arr = mySubmissionQuery.data || [];
+        if (arr.length > 0) setSubmission(arr[0]);
+        else setSubmission({ status: 'draft', submittedAt: null, grade: null, feedback: null, files: [] });
+      }
+    }
+  }, [isStudent, assignment, mySubmissionQuery.data, user]);
+
+  useEffect(() => {
+    const l = assignmentQuery.isLoading || (isInstructorOrAdmin && (submissionsQuery.isLoading || analyticsQuery.isLoading)) || (isStudent && mySubmissionQuery.isLoading);
+    setLoading(!!l);
+  }, [assignmentQuery.isLoading, submissionsQuery.isLoading, analyticsQuery.isLoading, mySubmissionQuery.isLoading, isInstructorOrAdmin, isStudent]);
+
+  // Prefill form fields when submission data is loaded or when entering edit mode
+  useEffect(() => {
+    if (submission && submission.content && isStudent && (submission.status !== 'submitted' || isEditingSubmission)) {
+      // Prefill text content
+      if (submission.content.text) {
+        setSubmissionText(submission.content.text);
+      }
+      
+      // Prefill links
+      if (submission.content.links && submission.content.links.length > 0) {
+        setSubmissionLinks(submission.content.links);
+      }
+      
+      // Note: Files are handled differently since they're already uploaded
+      // They will be displayed in the submitted files section
+    }
+  }, [submission, isStudent, isEditingSubmission]);
+
+  const handleEditSubmission = () => {
+    setIsEditingSubmission(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingSubmission(false);
+    // Reset form fields to original submission content
+    if (submission && submission.content) {
+      setSubmissionText(submission.content.text || '');
+      setSubmissionLinks(submission.content.links || []);
+      setSelectedFiles([]);
+    }
+  };
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -232,58 +270,65 @@ export default function AssignmentDetailPage() {
     setSubmissionLinks(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleGradeSubmission = async (submissionId, grade, feedback) => {
-    try {
-      await assignmentService.gradeSubmission(submissionId, { grade, feedback });
-      
-      // Update submissions list
-      setSubmissions(prev => prev.map(sub => 
-        sub.id === submissionId 
-          ? { ...sub, grade, feedback, gradedAt: new Date().toISOString() }
-          : sub
-      ));
-      
+  const gradeMutation = useMutation({
+    mutationFn: ({ submissionId, grade, feedback }) => assignmentService.gradeSubmission(submissionId, { grade, feedback }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'submissions'] });
       setGradingSubmission(null);
-      
-      toast({
-        title: "Success",
-        description: "Submission graded successfully"
-      });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to grade submission"
-      });
-      console.error('Grading error:', error);
-    }
+      toast({ title: 'Success', description: 'Submission graded successfully' });
+    },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to grade submission' });
+    },
+  });
+
+  const handleGradeSubmission = async (submissionId, grade, feedback) => {
+    await gradeMutation.mutateAsync({ submissionId, grade, feedback });
   };
 
-  const handleDeleteAssignment = async () => {
-    if (!confirm("Are you sure you want to delete this assignment? This action cannot be undone.")) {
-      return;
-    }
-    
-    try {
-      await assignmentService.deleteAssignment(id);
-      toast({
-        title: "Success",
-        description: "Assignment deleted successfully"
-      });
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: () => assignmentService.deleteAssignment(id),
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Assignment deleted successfully' });
+      qc.invalidateQueries({ queryKey: ['assignments'] });
       router.push('/assignments');
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to delete assignment"
-      });
-      console.error('Delete error:', error);
-    }
+    },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete assignment' });
+    },
+  });
+
+  const handleDeleteAssignment = async () => {
+    if (!confirm("Are you sure you want to delete this assignment? This action cannot be undone.")) return;
+    await deleteAssignmentMutation.mutateAsync();
   };
 
   const hasSubmissionContent = () => {
     return submissionText.trim().length > 0 || selectedFiles.length > 0 || submissionLinks.some(link => link.url.trim().length > 0);
   };
+
+  const submitMutation = useMutation({
+    mutationFn: ({ isEdit, submissionId, submissionData }) => {
+      return isEdit && submissionId
+        ? assignmentService.updateSubmission(submissionId, submissionData)
+        : assignmentService.submitAssignment(id, submissionData);
+    },
+    onSuccess: (result) => {
+      setSubmission(result);
+      setSelectedFiles([]);
+      setSubmissionText('');
+      setSubmissionLinks([]);
+      setIsEditingSubmission(false);
+      qc.invalidateQueries({ queryKey: ['assignment', id] });
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'mySubmission', user?.id] });
+      qc.invalidateQueries({ queryKey: ['assignment', id, 'submissions'] });
+      toast({ title: 'Success', description: isEditingSubmission ? 'Assignment updated successfully' : 'Assignment submitted successfully' });
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Submission failed', description: error?.message || 'Failed to submit assignment' });
+    },
+    onSettled: () => setSubmitting(false),
+  });
 
   const handleSubmit = async () => {
     if (!hasSubmissionContent()) {
@@ -318,8 +363,8 @@ export default function AssignmentDetailPage() {
         try {
           const uploadResponses = await fileService.uploadFiles(selectedFiles);
           submissionData.content.files = uploadResponses.map(response => response.data.file);
-          console.log('handleSubmit - uploadResponses:', uploadResponses);
-          console.log('handleSubmit - mapped files:', submissionData.content.files);
+          // 
+          // 
         } catch (uploadError) {
           toast({
             variant: "destructive",
@@ -330,31 +375,11 @@ export default function AssignmentDetailPage() {
           return;
         }
       }
-      
-      console.log('handleSubmit - final submissionData:', JSON.stringify(submissionData, null, 2));
-      
-      // Submit the assignment
-      const result = await assignmentService.submitAssignment(id, submissionData);
-      
-      // Update submission status
-      setSubmission(result);
-      setSelectedFiles([]);
-      setSubmissionText('');
-      setSubmissionLinks([]);
-      
-      toast({
-        title: "Success",
-        description: "Assignment submitted successfully"
-      });
+      await submitMutation.mutateAsync({ isEdit: isEditingSubmission, submissionId: submission?._id, submissionData });
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Submission failed",
-        description: error.message || "Failed to submit assignment"
-      });
       console.error('Submission error:', error);
     } finally {
-      setSubmitting(false);
+      // handled in onSettled
     }
   };
 
@@ -385,7 +410,7 @@ export default function AssignmentDetailPage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header Section */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center flex-wrap gap-4 justify-between mb-6">
             <Button 
               variant="outline" 
               size="sm" 
@@ -404,7 +429,7 @@ export default function AssignmentDetailPage() {
                 <span className="text-sm font-medium text-slate-700">{roleConfig.title}</span>
               </div>
               
-              {isInstructorOrAdmin && (
+              {isInstructor(user) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="text-slate-600 hover:text-slate-900 border-slate-300 bg-white shadow-sm">
@@ -440,9 +465,16 @@ export default function AssignmentDetailPage() {
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 font-medium">
-                      {assignment.status || 'Published'}
-                    </Badge>
+                    {isOverdue ? (
+                      <Badge className="bg-red-50 text-red-700 border border-red-200 px-3 py-1 font-medium flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Overdue
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 font-medium">
+                        {assignment.status || 'Published'}
+                      </Badge>
+                    )}
                     {assignment.priority && (
                       <Badge className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 font-medium flex items-center gap-1">
                         <Target className="h-3 w-3" />
@@ -504,8 +536,8 @@ export default function AssignmentDetailPage() {
 
         {/* Main Content */}
         {isInstructorOrAdmin ? (
-          <Tabs defaultValue="overview" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-4 bg-white border-0 shadow-sm rounded-xl p-1.5 h-14">
+          <Tabs defaultValue="overview" className="space-y-8 w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-white border-0 shadow-sm rounded-xl p-1.5 h-14">
               <TabsTrigger 
                 value="overview" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
@@ -520,20 +552,20 @@ export default function AssignmentDetailPage() {
                 <Users className="h-4 w-4 mr-2" />
                 Submissions
               </TabsTrigger>
-              <TabsTrigger 
+              {/* <TabsTrigger 
                 value="analytics" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Analytics
-              </TabsTrigger>
-              <TabsTrigger 
+              </TabsTrigger> */}
+              {/* <TabsTrigger 
                 value="grading" 
                 className="text-slate-600 data-[state=active]:text-slate-900 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Grading
-              </TabsTrigger>
+              </TabsTrigger> */}
             </TabsList>
           
             {/* Overview Tab */}
@@ -594,7 +626,7 @@ export default function AssignmentDetailPage() {
                   </Card>
                   
                   {/* Rubric Section */}
-                  {assignment.rubric && (
+                  {/* {assignment.rubric && (
                     <Card className="border-0 shadow-sm bg-white">
                       <CardHeader className="bg-slate-50/50 border-b border-slate-100 rounded-t-lg">
                         <CardTitle className="text-xl font-light text-slate-900 flex items-center gap-3">
@@ -618,7 +650,7 @@ export default function AssignmentDetailPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  )}
+                  )} */}
                 </div>
                 
                 {/* Sidebar */}
@@ -910,7 +942,7 @@ export default function AssignmentDetailPage() {
                 )}
               </div>
               
-              {/* Performance Insights */}
+              {/* Performance Insights
               <div className="space-y-6">
                 <Card className="border-0 shadow-sm bg-white">
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100 rounded-t-lg">
@@ -967,7 +999,7 @@ export default function AssignmentDetailPage() {
                     </Button>
                   </CardContent>
                 </Card>
-              </div>
+              </div> */}
             </div>
           </TabsContent>
           
@@ -1199,47 +1231,82 @@ export default function AssignmentDetailPage() {
                 <span>Your Submission</span>
               </CardTitle>
               <CardDescription>
-                {submission?.status === 'submitted' 
+                {isOverdue 
+                  ? 'This assignment is overdue and no longer accepts submissions'
+                  : submission?.status === 'graded' 
+                  ? 'Your assignment has been graded'
+                  : submission?.status === 'submitted' 
                   ? 'You have submitted this assignment'
                   : 'Submit your assignment before the due date'
                 }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {submission?.status === 'submitted' ? (
+              {isOverdue && !submission ? (
+                <div className="text-center py-8">
+                  <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="h-8 w-8 text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-slate-900 mb-2">Assignment Overdue</h3>
+                  <p className="text-slate-600">This assignment is past its due date and no longer accepts submissions.</p>
+                  <p className="text-sm text-slate-500 mt-2">Due date was: {formatDate(assignment.dueDate)}</p>
+                </div>
+              ) : (submission?.status === 'submitted' || submission?.status === 'graded') && !isEditingSubmission ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-3">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      {submission?.status === 'graded' ? (
+                        <Star className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      )}
                       <div>
-                        <p className="font-medium">Assignment Submitted</p>
+                        <p className="font-medium">
+                          {submission?.status === 'graded' ? 'Assignment Graded' : 'Assignment Submitted'}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           Submitted on {formatDate(submission.submittedAt)}
+                          {submission?.status === 'graded' && submission.grade?.gradedAt && (
+                            <span> • Graded on {formatDate(submission.grade.gradedAt)}</span>
+                          )}
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="bg-green-50">
-                      Submitted
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      {submission?.status === 'graded' ? (
+                        <>
+                          <div className="text-right mr-2">
+                            <div className="text-lg font-bold text-blue-600">
+                              {submission.grade?.score}/{assignment.points}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {Math.round((submission.grade?.score / assignment.points) * 100)}%
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            Graded
+                          </Badge>
+                        </>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50">
+                          Submitted
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   
-                  {submission.grade !== null && (
-                    <div className="p-4 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">Grade</h4>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold">{submission.grade}/{assignment.points}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {Math.round((submission.grade / assignment.points) * 100)}%
-                          </div>
+                  {/* Display feedback for graded submissions */}
+                  {submission?.status === 'graded' && submission.grade?.feedback && (
+                    <div className="p-6 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <MessageSquare className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-slate-900 mb-2">Instructor Feedback</h4>
+                          <p className="text-slate-700 leading-relaxed">{submission.grade.feedback}</p>
                         </div>
                       </div>
-                      {submission.feedback && (
-                        <div className="mt-3 p-3 bg-muted rounded-md">
-                          <h5 className="font-medium mb-1">Feedback</h5>
-                          <p className="text-sm text-muted-foreground">{submission.feedback}</p>
-                        </div>
-                      )}
                     </div>
                   )}
                   
@@ -1299,13 +1366,48 @@ export default function AssignmentDetailPage() {
                       ))}
                     </div>
                   )}
+                  
+                  {/*/!* Edit button for submitted (but not graded) assignments *!/*/}
+                  {/*{submission?.status === 'submitted' && !isOverdue && (*/}
+                  {/*  <div className="pt-4 border-t">*/}
+                  {/*    <Button */}
+                  {/*      variant="outline" */}
+                  {/*      onClick={handleEditSubmission}*/}
+                  {/*      className="w-full"*/}
+                  {/*    >*/}
+                  {/*      <Edit className="h-4 w-4 mr-2" />*/}
+                  {/*      Edit Submission*/}
+                  {/*    </Button>*/}
+                  {/*  </div>*/}
+                  {/*)}*/}
                 </div>
-              ) : (
+              ) : !isOverdue ? (
                 <div className="space-y-6">
                   {/* Single Unified Submission Interface */}
                   <div className="bg-slate-50 rounded-lg p-4">
-                    <h3 className="text-lg font-medium text-slate-900 mb-2">Submit Your Assignment</h3>
-                    <p className="text-sm text-slate-600 mb-4">Add text, links, and upload files for your submission</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-medium text-slate-900 mb-2">
+                          {isEditingSubmission ? 'Edit Your Submission' : 'Submit Your Assignment'}
+                        </h3>
+                        <p className="text-sm text-slate-600 mb-4">
+                          {isEditingSubmission 
+                            ? 'Update your assignment submission with new content' 
+                            : 'Add text, links, and upload files for your submission'
+                          }
+                        </p>
+                      </div>
+                      {isEditingSubmission && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleCancelEdit}
+                          className="text-gray-600 hover:text-gray-700"
+                        >
+                          Cancel Edit
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Text Submission */}
@@ -1446,11 +1548,14 @@ export default function AssignmentDetailPage() {
                       onClick={handleSubmit} 
                       disabled={submitting || (!hasSubmissionContent())}
                     >
-                      {submitting ? 'Submitting...' : 'Submit Assignment'}
+                      {submitting 
+                        ? (isEditingSubmission ? 'Updating...' : 'Submitting...') 
+                        : (isEditingSubmission ? 'Update Assignment' : 'Submit Assignment')
+                      }
                     </Button>
                   </div>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </div>

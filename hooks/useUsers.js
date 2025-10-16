@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import userService from '@/lib/api/userService';
 import { toast } from 'sonner';
 
@@ -107,3 +108,54 @@ export const useUsers = () => {
     error
   };
 };
+
+// React Query versions (incremental migration)
+
+export function useUsersQuery(filters = {}) {
+  return useQuery({
+    queryKey: ['users', filters],
+    queryFn: () => userService.getUsers(filters),
+  });
+}
+
+export function useUserQuery(id) {
+  return useQuery({
+    queryKey: ['users', id],
+    queryFn: () => userService.getUserById(id),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateUserMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, userData }) => userService.updateUser(userId, userData),
+    onSuccess: (_data, variables) => {
+      toast.success('User updated successfully');
+      qc.invalidateQueries({ queryKey: ['users'] });
+      if (variables?.userId) qc.invalidateQueries({ queryKey: ['users', variables.userId] });
+    },
+  });
+}
+
+export function useDeleteUserMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId) => userService.deleteUser(userId),
+    onSuccess: () => {
+      toast.success('User deleted successfully');
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+export function useUpdateProfileMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userData) => userService.updateProfile(userData),
+    onSuccess: () => {
+      toast.success('Profile updated successfully');
+      qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
