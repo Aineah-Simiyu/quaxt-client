@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { addDays, setHours, setMinutes, subDays } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -202,6 +203,7 @@ const studentSampleEvents = [
 
 function SessionsPage() {
 	const { user } = useAuth();
+	const qc = useQueryClient();
 	const [sessions, setSessions] = useState([]);
 	const [cohorts, setCohorts] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -274,123 +276,108 @@ function SessionsPage() {
 	const canCreateSessions = isInstructorOrAdmin(user);
 	const canManageSessions = isSchoolAdmin(user) || user?.role === ROLES.TRAINER;
 	
-	// Fetch sessions based on user role and active tab
-	const fetchSessions = useCallback(async () => {
-		if (!user) return;
-		
-		try {
-			setLoading(true);
-			let sessionsData;
-			
+	// React Query: sessions list by role and tab
+	const sessionsQuery = useQuery({
+		queryKey: [
+			"sessions",
+			user?.role,
+			user?.school,
+			user?._id,
+			activeTab,
+		],
+		enabled: !!user,
+		queryFn: async () => {
+			if (!user) return { data: [] };
 			if (isSchoolAdmin(user)) {
-				// School admin sees all sessions in their school
 				switch (activeTab) {
 					case "active":
-						sessionsData = { data: [] };
-						break;
+						return await sessionService.getActiveSessions();
 					case "previous":
-						sessionsData = await sessionService.getPreviousSessions(user._id);
-						break;
+						return await sessionService.getPreviousSessions(user._id);
 					case "upcoming":
-						sessionsData = await sessionService.getUpcomingSessions(user._id);
-						break;
+						return await sessionService.getUpcomingSessions(user._id);
 					default:
-						sessionsData = await sessionService.getSessionsBySchool(
-							user.school,
-						);
+						return await sessionService.getSessionsBySchool(user.school);
 				}
 			} else if (user?.role === ROLES.TRAINER) {
-				// Trainer sees their own sessions
 				switch (activeTab) {
 					case "active":
-						sessionsData = { data: [] };
-						break;
+						return await sessionService.getActiveSessions();
 					case "previous":
-						sessionsData = await sessionService.getPreviousSessions(user._id);
-						break;
+						return await sessionService.getPreviousSessions(user._id);
 					case "upcoming":
-						sessionsData = await sessionService.getUpcomingSessions(user._id);
-						break;
+						return await sessionService.getUpcomingSessions(user._id);
 					default:
-						sessionsData = await sessionService.getSessionsByTrainer(user._id);
+						return await sessionService.getSessionsByTrainer(user._id);
 				}
 			} else {
-				// Students see sessions from their cohorts
 				switch (activeTab) {
 					case "active":
-						sessionsData = { data: [] };
-						break;
+						return await sessionService.getActiveSessions();
 					case "previous":
-						sessionsData = await sessionService.getPreviousSessions(user._id);
-						break;
+						return await sessionService.getPreviousSessions(user._id);
 					case "upcoming":
-						sessionsData = await sessionService.getUpcomingSessions(user._id);
-						break;
+						return await sessionService.getUpcomingSessions(user._id);
 					default:
-						sessionsData = await sessionService.getSessions();
+						return await sessionService.getSessions();
 				}
 			}
-			
-			sessionsData = sessionsData || { data: [] };
-			const allSessions = Array.isArray(sessionsData.data) ? sessionsData.data : [];
-			setSessions(allSessions);
-			
-			// Calculate stats
-			const now = new Date();
-			const activeCount = allSessions.filter(
-				(s) => s.status === "live" || s.status === "ongoing",
-			).length;
-			const upcomingCount = allSessions.filter(
-				(s) => new Date(s.startDateTime) > now && s.status !== "cancelled",
-			).length;
-			const completedCount = allSessions.filter(
-				(s) => s.status === "completed",
-			).length;
-			
-			setStats({
-				totalSessions: allSessions.length,
-				activeSessions: activeCount,
-				upcomingSessions: upcomingCount,
-				completedSessions: completedCount,
-				attendanceRate: 85, // This would come from the API
-			});
-		} catch (error) {
-			console.error("Error fetching sessions:", error);
-			toast.error("Failed to load sessions");
-		} finally {
-			setLoading(false);
-		}
-	}, [user, activeTab]);
+		},
+	});
+
+	useEffect(() => {
+		const resp = sessionsQuery.data;
+		const arr = resp?.data || resp || [];
+		const list = Array.isArray(arr) ? arr : [];
+		setSessions(list);
+		// stats
+		const now = new Date();
+		const activeCount = list.filter((s) => s.status === "live" || s.status === "ongoing").length;
+		const upcomingCount = list.filter((s) => new Date(s.startDateTime) > now && s.status !== "cancelled").length;
+		const completedCount = list.filter((s) => s.status === "completed").length;
+		setStats({
+			totalSessions: list.length,
+			activeSessions: activeCount,
+			upcomingSessions: upcomingCount,
+			completedSessions: completedCount,
+			attendanceRate: 85,
+		});
+	}, [sessionsQuery.data]);
 	
-	// Fetch cohorts for creating sessions
-	const fetchCohorts = useCallback(async () => {
-		if (!user) return;
-		
-		try {
-			let cohortsData;
-			
-			if (isSchoolAdmin(user)) {
-				cohortsData = await cohortService.getCohortsBySchool(user.school);
-			} else if (user?.role === ROLES.TRAINER) {
-				cohortsData = await cohortService.getCohortsByTrainer(user._id);
-			} else {
-				return; // Students don't need to see cohorts for session creation
-			}
-			
-			setCohorts(cohortsData.data || []);
-		} catch (error) {
-			console.error("Error fetching cohorts:", error);
-		}
-	}, [user]);
+	// React Query: cohorts (for admins/trainers)
+	const cohortsQuery = useQuery({
+		queryKey: ["cohorts", user?.role, user?.school, user?._id],
+		enabled: !!user && (isSchoolAdmin(user) || user?.role === ROLES.TRAINER),
+		queryFn: async () => {
+			if (isSchoolAdmin(user)) return await cohortService.getCohortsBySchool(user.school);
+			if (user?.role === ROLES.TRAINER) return await cohortService.getCohortsByTrainer(user._id);
+			return { data: [] };
+		},
+	});
+
+	useEffect(() => {
+		const resp = cohortsQuery.data;
+		const arr = resp?.data || resp || [];
+		if (Array.isArray(arr)) setCohorts(arr);
+	}, [cohortsQuery.data]);
 	
 	useEffect(() => {
-		if (user) {
-			fetchSessions();
-			fetchCohorts();
-		}
-	}, [user, activeTab, fetchSessions, fetchCohorts]);
+		setLoading(sessionsQuery.isLoading || cohortsQuery.isLoading);
+	}, [sessionsQuery.isLoading, cohortsQuery.isLoading]);
 	
 	// Handle creating new session
+	const createSessionMutation = useMutation({
+		mutationFn: (payload) => sessionService.createSession(payload),
+		onSuccess: () => {
+			toast.success("Session created successfully");
+			qc.invalidateQueries({ queryKey: ["sessions"] });
+		},
+		onError: (error) => {
+			const errorMessage = error?.response?.data?.message || "Failed to create session";
+			toast.error(errorMessage);
+		},
+	});
+
 	const handleCreateSession = async () => {
 		const {
 			name,
@@ -432,9 +419,7 @@ function SessionsPage() {
 				school: user.school,
 				status: "scheduled",
 			};
-			
-			await sessionService.createSession(sessionData);
-			toast.success("Session created successfully");
+			await createSessionMutation.mutateAsync(sessionData);
 			setIsCreateDialogOpen(false);
 			setCreateSessionData({
 				name: "",
@@ -447,12 +432,8 @@ function SessionsPage() {
 				isRecurring: false,
 				recurringPattern: "weekly",
 			});
-			fetchSessions();
 		} catch (error) {
 			console.error("Error creating session:", error);
-			const errorMessage =
-				error.response?.data?.message || "Failed to create session";
-			toast.error(errorMessage);
 		}
 	};
 	
@@ -471,6 +452,15 @@ function SessionsPage() {
 	};
 	
 	// Handle updating session
+	const updateSessionMutation = useMutation({
+		mutationFn: ({ id, payload }) => sessionService.updateSession(id, payload),
+		onSuccess: () => {
+			toast.success("Session updated successfully");
+			qc.invalidateQueries({ queryKey: ["sessions"] });
+		},
+		onError: () => toast.error("Failed to update session"),
+	});
+
 	const handleUpdateSession = async () => {
 		if (!selectedSession) return;
 		
@@ -488,40 +478,50 @@ function SessionsPage() {
 		}
 		
 		try {
-			await sessionService.updateSession(selectedSession._id, {
+			await updateSessionMutation.mutateAsync({ id: selectedSession._id, payload: {
 				name: name.trim(),
 				description: description.trim(),
 				startDateTime,
 				endDateTime,
 				meetingLink: meetingLink.trim(),
-			});
-			
-			toast.success("Session updated successfully");
+			}});
 			setIsManageDialogOpen(false);
-			fetchSessions();
 		} catch (error) {
 			console.error("Error updating session:", error);
-			toast.error("Failed to update session");
 		}
 	};
 	
 	// Handle session status changes
+	const startMutation = useMutation({
+		mutationFn: (id) => sessionService.startSession(id),
+		onSuccess: () => { toast.success("Session started"); qc.invalidateQueries({ queryKey: ["sessions"] }); },
+	});
+	const endMutation = useMutation({
+		mutationFn: (id) => sessionService.endSession(id),
+		onSuccess: () => { toast.success("Session ended"); qc.invalidateQueries({ queryKey: ["sessions"] }); },
+	});
+	const cancelMutation = useMutation({
+		mutationFn: ({ id, reason }) => sessionService.cancelSession(id, reason),
+		onSuccess: () => { toast.success("Session cancelled"); qc.invalidateQueries({ queryKey: ["sessions"] }); },
+	});
+	const deleteMutation = useMutation({
+		mutationFn: (id) => sessionService.deleteSession(id),
+		onSuccess: () => { toast.success("Session deleted"); qc.invalidateQueries({ queryKey: ["sessions"] }); },
+	});
+
 	const handleSessionAction = async (sessionId, action) => {
 		try {
 			switch (action) {
 				case "start":
-					await sessionService.startSession(sessionId);
-					toast.success("Session started");
+					await startMutation.mutateAsync(sessionId);
 					break;
 				case "end":
-					await sessionService.endSession(sessionId);
-					toast.success("Session ended");
+					await endMutation.mutateAsync(sessionId);
 					break;
 				case "cancel":
 					const reason = prompt("Please provide a reason for cancellation:");
 					if (reason) {
-						await sessionService.cancelSession(sessionId, reason);
-						toast.success("Session cancelled");
+						await cancelMutation.mutateAsync({ id: sessionId, reason });
 					}
 					break;
 				case "delete":
@@ -530,12 +530,10 @@ function SessionsPage() {
 							"Are you sure you want to delete this session? This action cannot be undone.",
 						)
 					) {
-						await sessionService.deleteSession(sessionId);
-						toast.success("Session deleted");
+						await deleteMutation.mutateAsync(sessionId);
 					}
 					break;
 			}
-			fetchSessions();
 		} catch (error) {
 			console.error(`Error performing ${action} on session:`, error);
 			toast.error(`Failed to ${action} session`);
