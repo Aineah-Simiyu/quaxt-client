@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +51,7 @@ import {
 
 const Resources = () => {
   const { user } = useAuth();
+  const qc = useQueryClient();
   
   const [resources, setResources] = useState([]);
   const [cohorts, setCohorts] = useState([]);
@@ -86,77 +88,107 @@ const Resources = () => {
   // State for error handling
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
+  // Queries
+  const resourcesQuery = useQuery({
+    queryKey: ['resources', activeTab],
+    queryFn: async () => {
+      setError(null);
       try {
-        setLoading(true);
-        setError(null);
-        
-        // Fetch resources based on active tab
-        let resourcesData;
         switch (activeTab) {
           case 'templates':
-            resourcesData = await resourceService.getTemplateResources();
-            break;
+            return await resourceService.getTemplateResources();
           case 'popular':
-            resourcesData = await resourceService.getPopularResources();
-            break;
+            return await resourceService.getPopularResources();
           case 'recent':
-            resourcesData = await resourceService.getRecentResources();
-            break;
+            return await resourceService.getRecentResources();
           case 'favorites':
-            resourcesData = await resourceService.getFavoriteResources();
-            break;
+            return await resourceService.getFavoriteResources();
           default:
-            resourcesData = await resourceService.getResources();
+            return await resourceService.getResources();
         }
-        
-        // Fetch categories and analytics
-        const [categoriesData, analyticsData] = await Promise.all([
-          categoryService.getCategories(),
-          resourceService.getResourceAnalytics()
-        ]);
-        
-        setResources(resourcesData.data || []);
-        setCategories(categoriesData.data || []);
-        setAnalytics(analyticsData.data || {});
-        
-      } catch (error) {
-        console.error('Error fetching resources:', error);
+      } catch (e) {
         setError('Failed to load resources. Please try again.');
         toast.error('Failed to load resources');
-        // Set fallback empty arrays to prevent map errors
-        setResources([]);
-        setCategories([]);
-        setAnalytics({});
-      } finally {
-        setLoading(false);
+        throw e;
       }
-    };
-    
-    fetchData();
-    fetchCohorts();
-  }, [activeTab]);
+    },
+  });
 
-  const fetchCohorts = async () => {
-    try {
-      if (user?.role === 'school_admin' || user?.role === 'trainer') {
-        const cohortsData = await cohortService.getCohorts();
-        setCohorts(cohortsData.data || []);
+  const categoriesQuery = useQuery({
+    queryKey: ['resourceCategories'],
+    queryFn: () => categoryService.getCategories(),
+  });
+
+  const analyticsQuery = useQuery({
+    queryKey: ['resourceAnalytics'],
+    queryFn: () => resourceService.getResourceAnalytics(),
+  });
+
+  const cohortsQuery = useQuery({
+    queryKey: ['cohorts', user?.role, user?.school, user?._id],
+    enabled: !!user && (user.role === 'school_admin' || user.role === 'trainer'),
+    queryFn: async () => {
+      try {
+        if (user.role === 'school_admin') return await cohortService.getCohortsBySchool(user.school);
+        if (user.role === 'trainer') return await cohortService.getCohortsByTrainer(user._id);
+        return [];
+      } catch (e) {
+        // fallback to mock data
+        return {
+          data: [
+            { id: '1', name: 'Graduate Studies' },
+            { id: '2', name: 'Undergraduate Research' },
+            { id: '3', name: 'Business Studies' },
+            { id: '4', name: 'Engineering' },
+            { id: '5', name: 'First Year' },
+            { id: '6', name: 'Transfer Students' }
+          ]
+        };
       }
-    } catch (error) {
-      console.error('Error fetching cohorts:', error);
-      // Fallback to mock data
-      setCohorts([
-        { id: '1', name: 'Graduate Studies' },
-        { id: '2', name: 'Undergraduate Research' },
-        { id: '3', name: 'Business Studies' },
-        { id: '4', name: 'Engineering' },
-        { id: '5', name: 'First Year' },
-        { id: '6', name: 'Transfer Students' }
-      ]);
     }
-  };
+  });
+
+  // Sync query data into local state
+  useEffect(() => {
+    const r = resourcesQuery.data;
+    if (Array.isArray(r)) setResources(r);
+    else if (r?.data) setResources(r.data);
+  }, [resourcesQuery.data]);
+
+  useEffect(() => {
+    const c = categoriesQuery.data;
+    if (Array.isArray(c)) setCategories(c);
+    else if (c?.data) setCategories(c.data);
+  }, [categoriesQuery.data]);
+
+  useEffect(() => {
+    const a = analyticsQuery.data;
+    if (a) setAnalytics(a.data || a);
+  }, [analyticsQuery.data]);
+
+  useEffect(() => {
+    const ch = cohortsQuery.data;
+    if (Array.isArray(ch)) setCohorts(ch);
+    else if (ch?.data) setCohorts(ch.data);
+  }, [cohortsQuery.data]);
+
+  useEffect(() => {
+    setLoading(resourcesQuery.isLoading || categoriesQuery.isLoading || analyticsQuery.isLoading || cohortsQuery.isLoading);
+  }, [resourcesQuery.isLoading, categoriesQuery.isLoading, analyticsQuery.isLoading, cohortsQuery.isLoading]);
+
+  // Mutations
+  const createCategoryMutation = useMutation({
+    mutationFn: (payload) => categoryService.createCategory(payload),
+    onSuccess: (response) => {
+      toast.success('Category created successfully');
+      qc.invalidateQueries({ queryKey: ['resourceCategories'] });
+      // Update selection to new category
+      const created = response?.data || response;
+      setNewResource(prev => ({ ...prev, category: created?._id || created?.id }));
+      // Reset form state handled below
+    },
+    onError: () => toast.error('Failed to create category'),
+  });
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) {
@@ -170,14 +202,7 @@ const Resources = () => {
         description: newCategoryDescription.trim(),
         color: newCategoryColor
       };
-
-      const response = await categoryService.createCategory(categoryData);
-      
-      // Add the new category to the list
-      setCategories(prev => [...prev, response.data]);
-      
-      // Set the new category as selected
-      setNewResource(prev => ({ ...prev, category: response.data._id }));
+      await createCategoryMutation.mutateAsync(categoryData);
       
       // Reset category form
       setNewCategoryName('');
@@ -185,13 +210,20 @@ const Resources = () => {
       setNewCategoryColor('#3b82f6');
       
       setIsCreateCategoryDialogOpen(false);
-      toast.success('Category created successfully');
       
     } catch (error) {
       console.error('Error creating category:', error);
-      toast.error('Failed to create category');
     }
   };
+
+  const createResourceMutation = useMutation({
+    mutationFn: (payload) => resourceService.createResource(payload),
+    onSuccess: (res) => {
+      toast.success('Resource created successfully');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+    },
+    onError: () => toast.error('Failed to create resource'),
+  });
 
   const handleCreateResource = async () => {
     if (!newResource.title || !newResource.description || !newResource.url || !newResource.category) {
@@ -206,10 +238,10 @@ const Resources = () => {
         cohorts: newResource.cohorts || []
       };
 
-      const response = await resourceService.createResource(resourceData);
-      
-      // Add the new resource to the list
-      setResources(prev => [response.data, ...prev]);
+      const response = await createResourceMutation.mutateAsync(resourceData);
+      const created = response?.data || response;
+      // Optimistically add to local list for current view
+      setResources(prev => [created, ...(prev || [])]);
       
       // Reset form
       setNewResource({
@@ -226,27 +258,47 @@ const Resources = () => {
       });
       
       setIsCreateDialogOpen(false);
-      toast.success('Resource created successfully');
       
     } catch (error) {
       console.error('Error creating resource:', error);
-      toast.error('Failed to create resource');
     }
   };
 
+  const updateResourceMutation = useMutation({
+    mutationFn: ({ id, payload }) => resourceService.updateResource(id, payload),
+    onSuccess: () => {
+      toast.success('Resource updated successfully');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+    },
+    onError: () => toast.error('Failed to update resource'),
+  });
+
   const handleEditResource = async () => {
+    if (!selectedResource) return;
     try {
+      const payload = { ...selectedResource };
+      await updateResourceMutation.mutateAsync({ id: selectedResource.id || selectedResource._id, payload });
       setIsEditDialogOpen(false);
       setSelectedResource(null);
-      fetchData();
     } catch (error) {
       console.error('Error updating resource:', error);
     }
   };
 
+  const deleteResourceMutation = useMutation({
+    mutationFn: (id) => resourceService.deleteResource(id),
+    onSuccess: () => {
+      toast.success('Resource deleted successfully');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+    },
+    onError: () => toast.error('Failed to delete resource'),
+  });
+
   const handleDeleteResource = async (resourceId) => {
     try {
-      fetchData();
+      await deleteResourceMutation.mutateAsync(resourceId);
+      // Update local list
+      setResources(prev => (prev || []).filter(r => (r.id || r._id) !== resourceId));
     } catch (error) {
       console.error('Error deleting resource:', error);
     }
