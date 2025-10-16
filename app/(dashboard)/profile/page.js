@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -78,6 +79,7 @@ export default function ProfilePage() {
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
   const { toast } = useToast();
+  const qc = useQueryClient();
 
   // WhatsApp integration state
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
@@ -102,7 +104,6 @@ export default function ProfilePage() {
   );
   const [testLoading, setTestLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // ... (profileForm, passwordForm setup unchanged)
   const profileForm = useForm({
@@ -134,88 +135,45 @@ export default function ProfilePage() {
     }
   }, [user, profileForm]);
 
-  // Load WhatsApp sessions
-  const loadSessions = useCallback(async () => {
-    if (!user?.school) return;
-    try {
-      setSessionsLoading(true);
-      const response = await whatsappService.getSessions();
-      setSessions(response.data?.docs || []);
-      
-      // If sessions exist, enable WhatsApp toggle
-      if (response.data?.docs && response.data.docs.length > 0) {
+  // React Query: WhatsApp sessions
+  const sessionsQuery = useQuery({
+    queryKey: ["whatsappSessions", user?.school?._id || user?.school],
+    enabled: !!user && isSchoolAdmin(user) && !!user?.school,
+    queryFn: async () => whatsappService.getSessions(),
+  });
+
+  useEffect(() => {
+    const resp = sessionsQuery.data;
+    const docs = resp?.data?.docs || resp?.data || resp || [];
+    if (Array.isArray(docs)) {
+      setSessions(docs);
+      if (docs.length > 0) {
         setWhatsappEnabled(true);
         setIsSessionSaved(true);
       } else {
         setWhatsappEnabled(false);
         setIsSessionSaved(false);
       }
-    } catch (error) {
-      console.error("Error loading WhatsApp sessions:", error);
-      setSessions([]);
-      setWhatsappEnabled(false);
-      setIsSessionSaved(false);
-    } finally {
-      setSessionsLoading(false);
     }
-  }, [user?.school]);
+  }, [sessionsQuery.data]);
 
-  // Load WhatsApp status for the most recent active session
-  const loadWhatsappStatus = useCallback(async (sessionId = null) => {
-    if (!user?.school) return;
-    
-    try {
-      // If no sessionId provided, get the most recent session
-      let targetSessionId = sessionId;
-      if (!targetSessionId && sessions.length > 0) {
-        // Find the most recent session that's not closed
-        const activeSession = sessions.find(s => s.metaData?.status !== 'CLOSED');
-        if (activeSession) {
-          targetSessionId = activeSession._id;
-        } else {
-          // If all sessions are closed, use the most recent one
-          targetSessionId = sessions[0]._id;
-        }
-      }
-      
-      if (!targetSessionId) {
-        // No sessions available, set disconnected state
-        setWhatsappStatus({
-          isConnected: false,
-          status: "DISCONNECTED",
-          connectionText: "Disconnected",
-          statusText: "Inactive",
-          sessionId: null,
-          connectedAt: null,
-          lastUpdated: null,
-          hasActiveSession: false,
-        });
-        return;
-      }
+  // Determine target session (prefer non-closed)
+  const targetSessionId = (() => {
+    if (!sessions || sessions.length === 0) return null;
+    const active = sessions.find((s) => s.metaData?.status !== "CLOSED");
+    return (active?._id) || sessions[0]?._id || null;
+  })();
 
-      const response = await whatsappService.getSessionStatus(targetSessionId);
-      const data = response.data;
-      
-      // Check for connection status in the correct field
-      const isConnected = data.connection === 'connected';
-      
-      setWhatsappStatus({
-        isConnected: isConnected,
-        status: data.connection || "DISCONNECTED",
-        connectionText: isConnected ? "Connected" : "Disconnected",
-        statusText: data.connection || "Inactive",
-        sessionId: targetSessionId,
-        connectedAt: data.connectedAt,
-        lastUpdated: data.lastUpdated,
-        hasActiveSession: isConnected,
-      });
-      
-      if (isConnected) {
-        setIsSessionSaved(true);
-      }
-    } catch (error) {
-      console.error("Error loading WhatsApp status:", error);
-      // Set disconnected state on error
+  // React Query: WhatsApp status for selected session, polled when connect modal open
+  const statusQuery = useQuery({
+    queryKey: ["whatsappStatus", targetSessionId],
+    enabled: !!user && isSchoolAdmin(user) && !!user?.school && !!targetSessionId && showConnectModal,
+    queryFn: async () => whatsappService.getSessionStatus(targetSessionId),
+    refetchInterval: showConnectModal ? 3000 : false,
+  });
+
+  useEffect(() => {
+    if (!targetSessionId) {
       setWhatsappStatus({
         isConnected: false,
         status: "DISCONNECTED",
@@ -226,64 +184,42 @@ export default function ProfilePage() {
         lastUpdated: null,
         hasActiveSession: false,
       });
-    }
-  }, [user?.school, sessions]);
-
-  useEffect(() => {
-    if (user && isSchoolAdmin(user) && user.school) {
-      loadSessions();
-    }
-  }, [user, loadSessions]);
-
-  // Polling effect to check WhatsApp status when modal is open
-  useEffect(() => {
-    if (!user || !isSchoolAdmin(user) || !user.school || !showConnectModal || sessions.length === 0) {
       return;
     }
+    const resp = statusQuery.data;
+    const data = resp?.data || resp;
+    if (!data) return;
+    const isConnected = data.connection === "connected";
+    setWhatsappStatus({
+      isConnected,
+      status: data.connection || "DISCONNECTED",
+      connectionText: isConnected ? "Connected" : "Disconnected",
+      statusText: data.connection || "Inactive",
+      sessionId: targetSessionId,
+      connectedAt: data.connectedAt,
+      lastUpdated: data.lastUpdated,
+      hasActiveSession: isConnected,
+    });
+    if (isConnected) setIsSessionSaved(true);
+  }, [targetSessionId, statusQuery.data]);
 
-    let pollInterval;
-
-    const pollWithStopCondition = async () => {
-      try {
-        await loadWhatsappStatus();
-        // Check if connection is successful after loading status
-        if (whatsappStatus.isConnected || whatsappStatus.status === 'connected') {
-          // Stop polling immediately when connected
-          if (pollInterval) {
-            clearInterval(pollInterval);
-          }
-          
-          // Show success toast
-          toast({
-            title: "Connection Successful!",
-            description: "WhatsApp has been connected successfully.",
-            variant: "default",
-          });
-          
-          // Close modal and refresh page immediately
-          setTimeout(() => {
-            setShowConnectModal(false);
-            // Refresh the entire page to ensure all data is updated
-            window.location.reload();
-          }, 500); // Short delay to show the toast
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    };
-
-    // Initial load when modal opens
-    pollWithStopCondition();
-
-    // Poll every 3 seconds when modal is open (reduced from 5 seconds)
-    pollInterval = setInterval(pollWithStopCondition, 3000);
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [user, loadWhatsappStatus, showConnectModal, sessions.length, whatsappStatus.isConnected, whatsappStatus.status]);
+  // Close modal and refresh when connected
+  useEffect(() => {
+    if (!showConnectModal) return;
+    if (whatsappStatus.isConnected || whatsappStatus.status === "connected") {
+      toast({
+        title: "Connection Successful!",
+        description: "WhatsApp has been connected successfully.",
+        variant: "default",
+      });
+      setTimeout(() => {
+        setShowConnectModal(false);
+        qc.invalidateQueries({ queryKey: ["whatsappSessions"] });
+        // Full reload to ensure all dependent data reflects connection
+        window.location.reload();
+      }, 500);
+    }
+  }, [showConnectModal, whatsappStatus.isConnected, whatsappStatus.status, qc, toast]);
 
 
 
@@ -321,7 +257,7 @@ export default function ProfilePage() {
     }
 
     try {
-      await whatsappService.createSession(user.school?._id, sessionName); // Only saves name
+      await createSessionMutation.mutateAsync({ schoolId: user.school?._id || user.school, label: sessionName });
       setIsSessionSaved(true);
       toast({
         title: "Session Saved",
@@ -339,12 +275,18 @@ export default function ProfilePage() {
     }
   };
 
+  // Mutation: create session
+  const createSessionMutation = useMutation({
+    mutationFn: async ({ schoolId, label }) => whatsappService.createSession(schoolId, label),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsappSessions"] }),
+  });
+
   // Handle modal close and reload sessions if connection was successful
   const handleModalClose = () => {
     setShowConnectModal(false);
     // Check if connection was successful and reload sessions
     if (whatsappStatus.isConnected || whatsappStatus.status === 'connected') {
-      loadSessions();
+      qc.invalidateQueries({ queryKey: ["whatsappSessions"] });
     }
   };
 
@@ -363,8 +305,8 @@ export default function ProfilePage() {
       } else {
         // For new sessions, create session first
         const sessionNameToUse = sessionName;
-        const response = await whatsappService.createSession(user.school, sessionNameToUse);
-        if (response.data.qr) {
+        const response = await createSessionMutation.mutateAsync({ schoolId: user.school, label: sessionNameToUse });
+        if (response?.data?.qr) {
           setQrCode(response.data.qr);
         }
       }
