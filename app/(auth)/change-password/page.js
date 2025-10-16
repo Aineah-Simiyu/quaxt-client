@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, memo, useEffect, useMemo } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import './change-password.css';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -110,59 +111,62 @@ const ChangePasswordPage = memo(function ChangePasswordPage() {
 
 
 	// Handle KYC form submission (Step 1)
-	const onKycSubmit = async (data) => {
+    const onKycSubmit = async (data) => {
 		setKycData(data);
 		setCurrentStep(2);
 	};
 
-	// Handle password change form submission (Step 2)
-	const onPasswordSubmit = useCallback(async (values) => {
-		setIsLoading(true);
-		try {
-			// First, update user profile if KYC data is available
-			if (kycData) {
-				const profileUpdateData = {
-					firstName: kycData.firstName,
-					lastName: kycData.lastName,
-					phoneNumber: kycData.phoneNumber,
-					_ip_iT: 1
-				};
-				
-				await userService.updateUser(user._id, profileUpdateData);
-			}
-			
-			// Prepare password change payload
-			const passwordPayload = {
-				currentPassword: values.currentPassword,
-				newPassword: values.password,
-			};
-			
-			// Change password
-			await authService.changePassword(passwordPayload);
+    // Mutations
+    const profileMutation = useMutation({
+        mutationFn: (payload) => userService.updateUser(user._id, payload),
+    });
 
-			toast({
-				title: 'Setup Complete!',
-				description: kycData 
-					? 'Your profile has been updated and password changed successfully. Please log in again.'
-					: 'Your password has been updated. Please log in again with your new password.',
-				variant: 'default',
-			});
+    const changePasswordMutation = useMutation({
+        mutationFn: (payload) => authService.changePassword(payload),
+    });
 
-			// Log out user and redirect to login after successful password change
-			setTimeout(async () => {
-				await logout();
-				router.push('/login');
-			}, 1500);
-		} catch (error) {
-			toast({
-				title: kycData ? 'Setup Failed' : 'Password Change Failed',
-				description: error.response?.data?.message || 'An error occurred while updating your information.',
-				variant: 'destructive',
-			});
-		} finally {
-			setIsLoading(false);
-		}
-	}, [toast, logout, router, user, kycData]);
+    // Handle password change form submission (Step 2)
+    const onPasswordSubmit = useCallback(async (values) => {
+        setIsLoading(true);
+        try {
+            if (kycData) {
+                const profileUpdateData = {
+                    firstName: kycData.firstName,
+                    lastName: kycData.lastName,
+                    phoneNumber: kycData.phoneNumber,
+                    _ip_iT: 1,
+                };
+                await profileMutation.mutateAsync(profileUpdateData);
+            }
+
+            const passwordPayload = {
+                currentPassword: values.currentPassword,
+                newPassword: values.password,
+            };
+            await changePasswordMutation.mutateAsync(passwordPayload);
+
+            toast({
+                title: 'Setup Complete!',
+                description: kycData
+                    ? 'Your profile has been updated and password changed successfully. Please log in again.'
+                    : 'Your password has been updated. Please log in again with your new password.',
+                variant: 'default',
+            });
+
+            setTimeout(async () => {
+                await logout();
+                router.push('/login');
+            }, 1500);
+        } catch (error) {
+            toast({
+                title: kycData ? 'Setup Failed' : 'Password Change Failed',
+                description: error?.response?.data?.message || 'An error occurred while updating your information.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [toast, logout, router, user, kycData, profileMutation, changePasswordMutation]);
 
 	const handleLogout = async () => {
 		try {

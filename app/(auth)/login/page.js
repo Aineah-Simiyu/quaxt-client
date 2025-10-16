@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useMutation } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
@@ -67,28 +68,27 @@ export default function LoginPage() {
 		}
   };
 	
-	const onSubmit = async (values) => {
-		
-		try {
-
-			setIsLoading(true);
-			const userData = await login(values);
-			
-			localStorage.clear()
-			// Only redirect if user doesn't need to change password
+	const loginMutation = useMutation({
+		mutationFn: (values) => login(values),
+		onSuccess: async (userData) => {
+			localStorage.clear();
 			if (!userData.mustChangePassword || !userData.emailVerified) {
-				const token = await client.getToken(); // v2 instance method
+				const token = await client.getToken();
 				await registerUserToken(token);
 				router.replace('/dashboard');
 			}
-			// If mustChangePassword is true, AuthContext will handle the redirect
-			
-		} catch (error) {
+		},
+		onError: (error) => {
 			console.error('Login error:', error);
-			// Error is handled in the AuthContext
-		} finally {
-			setIsLoading(false);
-		}
+		},
+		onSettled: () => setIsLoading(false),
+	});
+
+	const onSubmit = async (values) => {
+		try {
+			setIsLoading(true);
+			await loginMutation.mutateAsync(values);
+		} catch (e) {}
 	};
 	
 	return (

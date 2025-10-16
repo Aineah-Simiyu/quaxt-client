@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { useMutation } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
@@ -73,7 +74,7 @@ export default function RegisterPage() {
 		mode: 'onChange',
 	});
 	
-	useEffect(() => {
+useEffect(() => {
 		if (currentStep === 2) {
 			const currentValues = adminForm.getValues();
 			const hasValues = Object.values(currentValues).some(value => value !== '');
@@ -88,41 +89,34 @@ export default function RegisterPage() {
 				});
 			}
 		}
-	}, [currentStep]);
+}, [currentStep, adminForm]);
 	
 	const onSchoolSubmit = async (data) => {
 		setSchoolData(data);
 		setCurrentStep(2);
 	};
 	
-	const onAdminSubmit = async (values) => {
-		try {
-			setIsLoading(true);
-			
-			const { confirmPassword, ...adminData } = values;
-			
-			const registrationData = {
-				school: schoolData,
-				admin: adminData,
-			};
-			
-			await register(registrationData);
-			toast({
-				title: "Registration successful",
-				description: "Your institution has been registered successfully."
-			});
-			router.push('/login');
-		} catch (error) {
-			console.error('Registration error:', error);
-			toast({
-				title: "Registration failed",
-				description: error.message || "An error occurred during registration.",
-				variant: "destructive"
-			});
-		} finally {
-			setIsLoading(false);
-		}
-	};
+const registerMutation = useMutation({
+    mutationFn: (registrationData) => register(registrationData),
+    onSuccess: () => {
+        toast({ title: 'Registration successful', description: 'Your institution has been registered successfully.' });
+        router.push('/login');
+    },
+    onError: (error) => {
+        console.error('Registration error:', error);
+        toast({ title: 'Registration failed', description: error?.message || 'An error occurred during registration.', variant: 'destructive' });
+    },
+    onSettled: () => setIsLoading(false),
+});
+
+const onAdminSubmit = async (values) => {
+    try {
+        setIsLoading(true);
+        const { confirmPassword, ...adminData } = values;
+        const registrationData = { school: schoolData, admin: adminData };
+        await registerMutation.mutateAsync(registrationData);
+    } catch (e) {}
+};
 
 	return (
 		<div className="min-h-screen bg-slate-50">
