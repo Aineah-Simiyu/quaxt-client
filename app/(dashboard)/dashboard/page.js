@@ -1,10 +1,19 @@
 import DashboardClient from './DashboardClient';
+import { cookies, headers } from 'next/headers';
 
 export default async function DashboardPage() {
-  // Server-side fetch via internal proxy; cookies forwarded automatically
+  // Server-side fetch via internal proxy; explicitly forward cookies
   let initialData = null;
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/analytics/dashboard`, { cache: 'no-store' });
+    const cookieHeader = cookies().toString();
+    const res = await fetch(`/api/analytics/dashboard`, {
+      cache: 'no-store',
+      headers: {
+        cookie: cookieHeader,
+        // Forward user agent optionally for backend telemetry
+        'x-forwarded-user-agent': headers().get('user-agent') || '',
+      },
+    });
     if (res.ok) {
       const json = await res.json();
       initialData = json?.data || json;
