@@ -62,6 +62,8 @@ export default function DashboardPage() {
     efficiency: 0,
     trend: '+0%'
   };
+  // Alias for KPI stats regardless of API shape
+  const stats = data?.stats || data || {};
   return (
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -103,7 +105,7 @@ export default function DashboardPage() {
               <>
                 <KPIStatCard
                     icon={FileText}
-                    value={dashboardData?.totalAssignments || 0}
+                    value={stats?.totalAssignments || 0}
                     title="Total Assignments"
                     subtitle="Assigned to you"
                     iconBgClass="bg-slate-100"
@@ -111,7 +113,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={CheckCircle}
-                    value={dashboardData?.completedAssignments || 0}
+                    value={stats?.completedAssignments || 0}
                     title="Completed"
                     subtitle="Assignments submitted"
                     iconBgClass="bg-green-50"
@@ -119,7 +121,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={Star}
-                    value={dashboardData?.gradedAssignments || 0}
+                    value={stats?.gradedAssignments || 0}
                     title="Graded"
                     subtitle="Assignments graded"
                     iconBgClass="bg-yellow-50"
@@ -127,7 +129,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={Percent}
-                    value={`${dashboardData?.completionRate || 0}%`}
+                    value={`${performance?.completionRate || 0}%`}
                     title="Completion Rate"
                     subtitle="Of all assignments"
                     iconBgClass="bg-indigo-50"
@@ -138,7 +140,7 @@ export default function DashboardPage() {
               <>
                 <KPIStatCard
                     icon={FileText}
-                    value={dashboardData?.totalAssignments || 0}
+                    value={stats?.totalAssignments || 0}
                     title="Total Assignments"
                     subtitle="Active assignments"
                     iconBgClass="bg-slate-100"
@@ -146,7 +148,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={Users}
-                    value={dashboardData?.totalStudents || 0}
+                    value={stats?.totalStudents || 0}
                     title="Students"
                     subtitle="Active students"
                     iconBgClass="bg-emerald-50"
@@ -154,7 +156,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={Contact}
-                    value={dashboardData?.totalTrainers || 0}
+                    value={stats?.totalTrainers || 0}
                     title="Trainers"
                     subtitle="Active trainers"
                     iconBgClass="bg-amber-50"
@@ -162,7 +164,7 @@ export default function DashboardPage() {
                 />
                 <KPIStatCard
                     icon={GraduationCap}
-                    value={dashboardData?.totalCohorts || 0}
+                    value={stats?.totalCohorts || 0}
                     title="Cohorts"
                     subtitle="Active cohorts"
                     iconBgClass="bg-blue-50"
