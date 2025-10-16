@@ -297,7 +297,7 @@ function SessionsPage() {
 					case "upcoming":
 						return await sessionService.getUpcomingSessions(user._id);
 					default:
-						return await sessionService.getSessionsBySchool(user.school);
+						return await sessionService.getSessionsBySchool(user.schoolId);
 				}
 			} else if (user?.role === ROLES.TRAINER) {
 				switch (activeTab) {
@@ -349,7 +349,7 @@ function SessionsPage() {
 		queryKey: ["cohorts", user?.role, user?.school, user?._id],
 		enabled: !!user && (isSchoolAdmin(user) || user?.role === ROLES.TRAINER),
 		queryFn: async () => {
-			if (isSchoolAdmin(user)) return await cohortService.getCohortsBySchool(user.school);
+			if (isSchoolAdmin(user)) return await cohortService.getCohortsBySchool(user.schoolId);
 			if (user?.role === ROLES.TRAINER) return await cohortService.getCohortsByTrainer(user._id);
 			return { data: [] };
 		},
@@ -416,7 +416,7 @@ function SessionsPage() {
 				meetingLink: meetingLink.trim(),
 				type,
 				createdBy: user._id,
-				school: user.school,
+				school: user.schoolId,
 				status: "scheduled",
 			};
 			await createSessionMutation.mutateAsync(sessionData);

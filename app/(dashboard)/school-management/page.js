@@ -59,7 +59,7 @@ function SchoolManagementPage() {
         return await userService.getUsers({ role: 'trainer' });
       }
       if (user?.school) {
-        return await userService.getUsersBySchoolAndRole(user.school, 'trainer');
+        return await userService.getUsersBySchoolAndRole(user.schoolId, 'trainer');
       }
       return { data: [] };
     },
@@ -70,7 +70,7 @@ function SchoolManagementPage() {
     enabled: !!user,
     queryFn: async () => {
       if (user?.role === ROLES.ADMIN) return await cohortService.getCohorts();
-      if (user?.school) return await cohortService.getCohortsBySchool(user.school);
+      if (user?.school) return await cohortService.getCohortsBySchool(user.schoolId);
       return { data: [] };
     },
   });
@@ -169,7 +169,7 @@ function SchoolManagementPage() {
     createTrainerMutation.mutate({
       name: trainerName,
       email: trainerEmail,
-      ...(user?.school ? { school: user.school } : {}),
+      ...(user?.school ? { school: user.schoolId } : {}),
       role: 'trainer',
     });
   };
@@ -208,7 +208,7 @@ function SchoolManagementPage() {
       description: cohortDescription,
       startDate: cohortStartDate,
       endDate: cohortEndDate,
-      ...(user?.school ? { school: user.school } : {}),
+      ...(user?.school ? { school: user.schoolId } : {}),
     });
   };
   

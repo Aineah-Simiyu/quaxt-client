@@ -129,7 +129,7 @@ const Resources = () => {
     enabled: !!user && (user.role === 'school_admin' || user.role === 'trainer'),
     queryFn: async () => {
       try {
-        if (user.role === 'school_admin') return await cohortService.getCohortsBySchool(user.school);
+        if (user.role === 'school_admin') return await cohortService.getCohortsBySchool(user.schoolId);
         if (user.role === 'trainer') return await cohortService.getCohortsByTrainer(user._id);
         return [];
       } catch (e) {

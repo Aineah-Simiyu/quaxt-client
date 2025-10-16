@@ -204,7 +204,7 @@ class WhatsappController extends BaseController {
 
     // For SCHOOL_ADMIN, verify they belong to this school
     if (user.role === ROLES.SCHOOL_ADMIN) {
-      if (user.school?.toString() !== schoolId) {
+      if (user.schoolId?.toString() !== schoolId) {
         throw new ApiError('Access denied. You can only manage your own school.', 403);
       }
       return;

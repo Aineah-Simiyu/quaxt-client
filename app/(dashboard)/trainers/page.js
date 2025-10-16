@@ -114,7 +114,7 @@ function TrainersPage() {
     enabled: !!user?.school,
     queryFn: async () => {
       const res = await userService.getUsersBySchoolAndRole(
-        user.school,
+        user.schoolId,
         ROLES.TRAINER,
       );
       const trainersData = Array.isArray(res) ? res : res?.data || [];
@@ -139,7 +139,7 @@ function TrainersPage() {
     queryKey: ["cohorts", user?.school],
     enabled: !!user?.school,
     queryFn: async () => {
-      const res = await cohortService.getCohortsBySchool(user.school);
+      const res = await cohortService.getCohortsBySchool(user.schoolId);
       return Array.isArray(res) ? res : res?.data || [];
     },
   });
@@ -160,7 +160,7 @@ function TrainersPage() {
 
   const handleInviteTrainer = async (e) => {
     e.preventDefault();
-    await inviteTrainerMutation.mutateAsync({ ...inviteForm, schoolId: user.school });
+    await inviteTrainerMutation.mutateAsync({ ...inviteForm, schoolId: user.schoolId });
   };
 
   // Handle create trainer
@@ -179,7 +179,7 @@ function TrainersPage() {
 
   const handleCreateTrainer = async (e) => {
     e.preventDefault();
-    await createTrainerMutation.mutateAsync({ ...createForm, schoolId: user.school });
+    await createTrainerMutation.mutateAsync({ ...createForm, schoolId: user.schoolId });
   };
 
   // Handle assign trainer to cohorts

@@ -64,7 +64,7 @@ export default function CreateAssignmentPage() {
     enabled: !!user,
     queryFn: async () => {
       if (user?.role === ROLES.SCHOOL_ADMIN && user?.school) {
-        return await cohortService.getCohortsBySchool(user.school);
+        return await cohortService.getCohortsBySchool(user.schoolId);
       }
       if (user?._id) {
         return await cohortService.getCohortsByTrainer(user._id);

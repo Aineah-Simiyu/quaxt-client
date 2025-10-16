@@ -44,7 +44,7 @@ export default function AnalyticsPage() {
     queryFn: async () => {
       try {
         return isSchoolAdminUser
-          ? await cohortService.getCohortsBySchool(user.school)
+          ? await cohortService.getCohortsBySchool(user.schoolId)
           : await cohortService.getCohortsByTrainer(user._id);
       } catch (error) {
         toast({ title: 'Error', description: 'Failed to load cohorts', variant: 'destructive' });
@@ -71,7 +71,7 @@ export default function AnalyticsPage() {
       try {
         const filters = buildFilters();
         return isSchoolAdminUser
-          ? await analyticsService.getSchoolAnalytics(user.school, filters)
+          ? await analyticsService.getSchoolAnalytics(user.schoolId, filters)
           : await analyticsService.getTrainerAnalytics(user._id, filters);
       } catch (error) {
         toast({ title: 'Error', description: 'Failed to load analytics data', variant: 'destructive' });

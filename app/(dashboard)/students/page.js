@@ -121,7 +121,7 @@ function StudentsPage() {
     enabled: !!user,
     queryFn: async () => {
       if (isSchoolAdmin(user)) {
-        return analyticsService.getSchoolAnalytics(user.school);
+        return analyticsService.getSchoolAnalytics(user.schoolId);
       }
       return analyticsService.getTrainerAnalytics(user._id);
     },
@@ -216,8 +216,8 @@ function StudentsPage() {
     queryFn: async () => {
       if (isSchoolAdmin(user)) {
         const [studentsResponse, cohortsResponse] = await Promise.all([
-          userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT),
-          cohortService.getCohortsBySchool(user.school),
+          userService.getUsersBySchoolAndRole(user.schoolId, ROLES.STUDENT),
+          cohortService.getCohortsBySchool(user.schoolId),
         ]);
         const rawStudents = studentsResponse?.data || studentsResponse || [];
         const allCohorts = cohortsResponse?.data || cohortsResponse || [];
@@ -310,7 +310,7 @@ function StudentsPage() {
     enabled: !!user,
     queryFn: async () => {
       if (isSchoolAdmin(user)) {
-        const res = await cohortService.getCohortsBySchool(user.school);
+        const res = await cohortService.getCohortsBySchool(user.schoolId);
         return res?.data || res || [];
       }
       const res = await cohortService.getCohortsByTrainer(user._id);
@@ -494,6 +494,7 @@ function StudentsPage() {
     await deleteStudentMutation.mutateAsync(selectedStudent._id);
   };
 
+  console.info('sidovisdvns', user)
   // Handle bulk upload of students
   const bulkUploadStudentsMutation = useMutation({
     mutationFn: ({ file, cohortId }) => userService.bulkUploadStudents(file, cohortId),
@@ -575,7 +576,7 @@ function StudentsPage() {
         lastName: lastName.trim(),
         email: email.trim(),
         role: "student",
-        schoolId: user.school,
+        schoolId: user.schoolId,
       };
 
       // Create the user first

@@ -41,19 +41,19 @@ function CohortsPage() {
   const cohortsQuery = useQuery({
     queryKey: ['cohorts', user?.school],
     enabled: !!user?.school,
-    queryFn: () => cohortService.getCohortsBySchool(user.school),
+    queryFn: () => cohortService.getCohortsBySchool(user.schoolId),
   });
 
   const trainersQuery = useQuery({
     queryKey: ['users', 'school', user?.school, 'trainers'],
     enabled: !!user?.school,
-    queryFn: () => userService.getUsersBySchoolAndRole(user.school, ROLES.TRAINER),
+    queryFn: () => userService.getUsersBySchoolAndRole(user.schoolId, ROLES.TRAINER),
   });
 
   const studentsQuery = useQuery({
     queryKey: ['users', 'school', user?.school, 'students'],
     enabled: !!user?.school,
-    queryFn: () => userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT),
+    queryFn: () => userService.getUsersBySchoolAndRole(user.schoolId, ROLES.STUDENT),
   });
 
   // Sync query data into local state to minimize UI changes
@@ -93,7 +93,7 @@ function CohortsPage() {
     e.preventDefault();
     await createCohortMutation.mutateAsync({
       ...cohortForm,
-      school: user.school,
+      school: user.schoolId,
     });
     setIsCreateDialogOpen(false);
     setCohortForm({ name: '', description: '', startDate: '', endDate: '', status: 'ACTIVE' });

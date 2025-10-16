@@ -292,7 +292,7 @@ export default function ProfilePage() {
     }
 
     try {
-      await createSessionMutation.mutateAsync({ schoolId: user.school?._id || user.school, label: sessionName });
+      await createSessionMutation.mutateAsync({ schoolId: user.schoolId || user.schoolId, label: sessionName });
       setIsSessionSaved(true);
       toast({
         title: "Session Saved",
@@ -340,7 +340,7 @@ export default function ProfilePage() {
       } else {
         // For new sessions, create session first
         const sessionNameToUse = sessionName;
-        const response = await createSessionMutation.mutateAsync({ schoolId: user.school, label: sessionNameToUse });
+        const response = await createSessionMutation.mutateAsync({ schoolId: user.schoolId, label: sessionNameToUse });
         if (response?.data?.qr) {
           setQrCode(response.data.qr);
         }
@@ -379,7 +379,7 @@ export default function ProfilePage() {
     setTestLoading(true);
     try {
       await whatsappService.sendTestNotification(
-        user.school,
+        user.schoolId,
         phoneValidation.cleaned,
         testMessage,
       );
