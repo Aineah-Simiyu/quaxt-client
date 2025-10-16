@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import {
   Card,
@@ -62,9 +63,10 @@ import { userService, cohortService, analyticsService } from "@/lib/api";
 
 function StudentsPage() {
   let { user } = useAuth();
-  const [students, setStudents] = useState([]);
-  const [cohorts, setCohorts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const [students, setStudents] = useState([]); // kept for minimal changes in local handlers
+  const [cohorts, setCohorts] = useState([]); // kept for local modal state usage
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCohort, setSelectedCohort] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -113,34 +115,17 @@ function StudentsPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
 
-  // Fetch analytics data
-  const fetchAnalytics = async () => {
-    try {
-      setAnalyticsLoading(true);
-      let analyticsResponse;
-
+  // React Query: analytics
+  const analyticsQuery = useQuery({
+    queryKey: ["analytics", isSchoolAdmin(user) ? "school" : "trainer", user?.school, user?._id],
+    enabled: !!user,
+    queryFn: async () => {
       if (isSchoolAdmin(user)) {
-        // School admin gets school-wide analytics
-        analyticsResponse = await analyticsService.getSchoolAnalytics(
-          user.school,
-        );
-      } else {
-        // Trainer gets their specific analytics
-        analyticsResponse = await analyticsService.getTrainerAnalytics(
-          user._id,
-        );
+        return analyticsService.getSchoolAnalytics(user.school);
       }
-
-      setAnalyticsData(analyticsResponse);
-      return analyticsResponse;
-    } catch (error) {
-      console.error("Error fetching analytics:", error);
-      toast.error("Failed to fetch analytics data");
-      return null;
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
+      return analyticsService.getTrainerAnalytics(user._id);
+    },
+  });
 
   // Calculate student progress based on cohort duration and joining date
   const calculateStudentProgress = (cohort, studentJoinDate) => {
@@ -224,114 +209,56 @@ function StudentsPage() {
     return Array.from(studentMap.values());
   };
 
-  // Fetch students data
-  const fetchStudents = async () => {
-    try {
-      let studentsData = [];
+  // React Query: students (enriched)
+  const studentsQuery = useQuery({
+    queryKey: ["students", isSchoolAdmin(user) ? "school" : "trainer", user?.school, user?._id],
+    enabled: !!user,
+    queryFn: async () => {
       if (isSchoolAdmin(user)) {
-        // For school admins, get all students and enrich with cohort data
         const [studentsResponse, cohortsResponse] = await Promise.all([
           userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT),
           cohortService.getCohortsBySchool(user.school),
         ]);
-
-        const rawStudents = studentsResponse.data || [];
-        const allCohorts = cohortsResponse.data || [];
-
-        // Enrich students with cohort information
-        studentsData = await enrichStudentWithCohorts(rawStudents, allCohorts);
-      } else {
-        // For trainers, get students from their cohorts with complete information
-        const cohortResponse = await cohortService.getCohortsByTrainer(
-          user._id,
-        );
-        const trainerCohorts = cohortResponse.data || [];
-
-        // Extract and enrich students from all trainer's cohorts
-        const studentMap = new Map();
-
-        for (const cohort of trainerCohorts) {
-          if (cohort.students && Array.isArray(cohort.students)) {
-            for (const student of cohort.students) {
-              // Skip if student data is not populated (just an ID)
-              if (typeof student === "string" || !student._id) {
-                console.warn(
-                  `Student data not populated for cohort ${cohort.name}`,
-                );
-                continue;
-              }
-
-              // Calculate progress for this cohort
-              const progress = calculateStudentProgress(
-                cohort,
-                student.createdAt,
-              );
-
-              // Enrich student data with cohort information
-              const enrichedStudent = {
-                ...student,
-                cohorts: studentMap.has(student._id)
-                  ? [
-                      ...(studentMap.get(student._id).cohorts || []),
-                      {
-                        _id: cohort._id,
-                        name: cohort.name,
-                        progress: progress,
-                        status: cohort.status,
-                        startDate: cohort.startDate,
-                        endDate: cohort.endDate,
-                      },
-                    ]
-                  : [
-                      {
-                        _id: cohort._id,
-                        name: cohort.name,
-                        progress: progress,
-                        status: cohort.status,
-                        startDate: cohort.startDate,
-                        endDate: cohort.endDate,
-                      },
-                    ],
-                // Calculate overall progress (average across cohorts)
-                overallProgress: studentMap.has(student._id)
-                  ? Math.round(
-                      ((studentMap.get(student._id).overallProgress || 0) +
-                        progress) /
-                        2,
-                    )
-                  : progress,
-                // Set status based on cohort activity and user status
-                status: student.isActive === false ? "inactive" : "active",
-                // Add joining date (use earliest cohort join or user creation)
-                joinedDate: student.createdAt,
-              };
-
-              studentMap.set(student._id, enrichedStudent);
-            }
+        const rawStudents = studentsResponse?.data || studentsResponse || [];
+        const allCohorts = cohortsResponse?.data || cohortsResponse || [];
+        return enrichStudentWithCohorts(rawStudents, allCohorts);
+      }
+      const cohortResponse = await cohortService.getCohortsByTrainer(user._id);
+      const trainerCohorts = cohortResponse?.data || cohortResponse || [];
+      const studentMap = new Map();
+      for (const cohort of trainerCohorts) {
+        if (cohort.students && Array.isArray(cohort.students)) {
+          for (const student of cohort.students) {
+            if (typeof student === "string" || !student._id) continue;
+            const progress = calculateStudentProgress(cohort, student.createdAt);
+            const existing = studentMap.get(student._id);
+            const cohortsArr = existing?.cohorts || [];
+            const overall = existing?.overallProgress;
+            const newOverall =
+              overall != null ? Math.round((overall + progress) / 2) : progress;
+            studentMap.set(student._id, {
+              ...student,
+              cohorts: [
+                ...cohortsArr,
+                {
+                  _id: cohort._id,
+                  name: cohort.name,
+                  progress,
+                  status: cohort.status,
+                  startDate: cohort.startDate,
+                  endDate: cohort.endDate,
+                },
+              ],
+              overallProgress: newOverall,
+              status: student.isActive === false ? "inactive" : "active",
+              joinedDate: student.createdAt,
+            });
           }
         }
-
-        studentsData = Array.from(studentMap.values());
       }
-
-      setStudents(studentsData);
-
-      // Calculate basic stats from student data
-      const totalStudents = studentsData.length;
-      const activeStudents = studentsData.filter(
-        (s) => s.status === "active",
-      ).length;
-
-      setStats((prevStats) => ({
-        ...prevStats,
-        totalStudents,
-        activeStudents,
-      }));
-    } catch (error) {
-      console.error("Error fetching students:", error);
-      toast.error("Failed to fetch students");
-    }
-  };
+      return Array.from(studentMap.values());
+    },
+  });
 
   // Calculate analytics-based stats
   const calculateAnalyticsStats = (analytics, studentsCount) => {
@@ -377,43 +304,33 @@ function StudentsPage() {
     }
   };
 
-  // Fetch cohorts data
-  const fetchCohorts = async () => {
-    try {
-      let response;
+  // React Query: cohorts list per role
+  const cohortsQuery = useQuery({
+    queryKey: ["cohorts", isSchoolAdmin(user) ? "school" : "trainer", user?.school, user?._id],
+    enabled: !!user,
+    queryFn: async () => {
       if (isSchoolAdmin(user)) {
-        response = await cohortService.getCohortsBySchool(user.school);
-      } else {
-        response = await cohortService.getCohortsByTrainer(user._id);
+        const res = await cohortService.getCohortsBySchool(user.school);
+        return res?.data || res || [];
       }
-      setCohorts(response.data || []);
-    } catch (error) {
-      console.error("Error fetching cohorts:", error);
-    }
-  };
+      const res = await cohortService.getCohortsByTrainer(user._id);
+      return res?.data || res || [];
+    },
+  });
+
+  // Sync derived local states for minimal changes
+  useEffect(() => {
+    if (studentsQuery.data) setStudents(studentsQuery.data);
+  }, [studentsQuery.data]);
 
   useEffect(() => {
-    if (user) {
-      const loadData = async () => {
-        try {
-          // Fetch students and cohorts first
-          await Promise.all([fetchStudents(), fetchCohorts()]);
+    if (cohortsQuery.data) setCohorts(cohortsQuery.data);
+  }, [cohortsQuery.data]);
 
-          // Then fetch analytics and calculate stats
-          const analytics = await fetchAnalytics();
-          if (analytics) {
-            calculateAnalyticsStats(analytics, students.length);
-          }
-        } catch (error) {
-          console.error("Error loading data:", error);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      loadData();
-    }
-  }, [user]);
+  useEffect(() => {
+    setAnalyticsLoading(analyticsQuery.isLoading);
+    if (analyticsQuery.data) setAnalyticsData(analyticsQuery.data);
+  }, [analyticsQuery.isLoading, analyticsQuery.data]);
 
   // Update analytics stats when students data changes
   useEffect(() => {
@@ -423,28 +340,29 @@ function StudentsPage() {
   }, [analyticsData, students]);
 
   // Handle student invitation
+  const inviteStudentsMutation = useMutation({
+    mutationFn: ({ cohortId, emails }) => cohortService.inviteStudentsToCohort(cohortId, emails),
+    onSuccess: (_res, variables) => {
+      toast.success(`Invited ${variables?.emails?.length || 0} student(s) successfully`);
+      setIsInviteDialogOpen(false);
+      setInviteEmails("");
+      setInviteCohort("");
+      qc.invalidateQueries({ queryKey: ["students"] });
+    },
+    onError: () => toast.error("Failed to invite students"),
+  });
+
   const handleInviteStudents = async () => {
     if (!inviteEmails.trim() || !inviteCohort) {
       toast.error("Please provide email addresses and select a cohort");
       return;
     }
 
-    try {
-      const emails = inviteEmails
-        .split(",")
-        .map((email) => email.trim())
-        .filter((email) => email);
-      await cohortService.inviteStudentsToCohort(inviteCohort, emails);
-
-      toast.success(`Invited ${emails.length} student(s) successfully`);
-      setIsInviteDialogOpen(false);
-      setInviteEmails("");
-      setInviteCohort("");
-      fetchStudents();
-    } catch (error) {
-      console.error("Error inviting students:", error);
-      toast.error("Failed to invite students");
-    }
+    const emails = inviteEmails
+      .split(",")
+      .map((email) => email.trim())
+      .filter((email) => email);
+    await inviteStudentsMutation.mutateAsync({ cohortId: inviteCohort, emails });
   };
 
   // Handle opening student management modal
@@ -471,6 +389,16 @@ function StudentsPage() {
   };
 
   // Handle updating student information
+  const updateStudentMutation = useMutation({
+    mutationFn: ({ id, payload }) => userService.updateUser(id, payload),
+    onSuccess: () => {
+      toast.success("Student updated successfully");
+      setIsManageDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["students"] });
+    },
+    onError: () => toast.error("Failed to update student"),
+  });
+
   const handleUpdateStudent = async () => {
     if (!selectedStudent) return;
 
@@ -487,21 +415,15 @@ function StudentsPage() {
       return;
     }
 
-    try {
-      await userService.updateUser(selectedStudent._id, {
+    await updateStudentMutation.mutateAsync({
+      id: selectedStudent._id,
+      payload: {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
         isActive,
-      });
-
-      toast.success("Student updated successfully");
-      setIsManageDialogOpen(false);
-      fetchStudents();
-    } catch (error) {
-      console.error("Error updating student:", error);
-      toast.error("Failed to update student");
-    }
+      },
+    });
   };
 
   // Handle adding student to cohort
@@ -548,6 +470,16 @@ function StudentsPage() {
   };
 
   // Handle deleting student
+  const deleteStudentMutation = useMutation({
+    mutationFn: (id) => userService.deleteUser(id),
+    onSuccess: () => {
+      toast.success("Student deleted successfully");
+      setIsManageDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["students"] });
+    },
+    onError: () => toast.error("Failed to delete student"),
+  });
+
   const handleDeleteStudent = async () => {
     if (!selectedStudent) return;
 
@@ -559,18 +491,31 @@ function StudentsPage() {
       return;
     }
 
-    try {
-      await userService.deleteUser(selectedStudent._id);
-      toast.success("Student deleted successfully");
-      setIsManageDialogOpen(false);
-      fetchStudents();
-    } catch (error) {
-      console.error("Error deleting student:", error);
-      toast.error("Failed to delete student");
-    }
+    await deleteStudentMutation.mutateAsync(selectedStudent._id);
   };
 
   // Handle bulk upload of students
+  const bulkUploadStudentsMutation = useMutation({
+    mutationFn: ({ file, cohortId }) => userService.bulkUploadStudents(file, cohortId),
+    onSuccess: (response) => {
+      const { successful, failed, total } = response?.data || response || {};
+      if (failed > 0) {
+        toast.success(`Bulk upload completed: ${successful}/${total} students added successfully. ${failed} failed.`);
+      } else {
+        toast.success(`Successfully uploaded ${successful} students to the cohort!`);
+      }
+      setIsBulkUploadDialogOpen(false);
+      setBulkUploadFile(null);
+      setBulkUploadCohort("");
+      qc.invalidateQueries({ queryKey: ["students"] });
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || "Failed to upload students";
+      toast.error(errorMessage);
+    },
+    onSettled: () => setBulkUploadLoading(false),
+  });
+
   const handleBulkUpload = async () => {
     if (!bulkUploadFile || !bulkUploadCohort) {
       toast.error("Please select a CSV file and choose a cohort");
@@ -593,40 +538,7 @@ function StudentsPage() {
     }
 
     setBulkUploadLoading(true);
-
-    try {
-      const response = await userService.bulkUploadStudents(
-        bulkUploadFile,
-        bulkUploadCohort,
-      );
-
-      const { successful, failed, total } = response.data;
-
-      if (failed > 0) {
-        toast.success(
-          `Bulk upload completed: ${successful}/${total} students added successfully. ${failed} failed.`,
-        );
-      } else {
-        toast.success(
-          `Successfully uploaded ${successful} students to the cohort!`,
-        );
-      }
-
-      // Reset form and close modal
-      setIsBulkUploadDialogOpen(false);
-      setBulkUploadFile(null);
-      setBulkUploadCohort("");
-
-      // Refresh students list
-      fetchStudents();
-    } catch (error) {
-      console.error("Error during bulk upload:", error);
-      const errorMessage =
-        error.response?.data?.message || "Failed to upload students";
-      toast.error(errorMessage);
-    } finally {
-      setBulkUploadLoading(false);
-    }
+    await bulkUploadStudentsMutation.mutateAsync({ file: bulkUploadFile, cohortId: bulkUploadCohort });
   };
 
   // Handle file selection for bulk upload
@@ -735,7 +647,8 @@ function StudentsPage() {
     return matchesSearch && matchesCohort && matchesStatus;
   });
 
-  if (loading) {
+  const loadingState = studentsQuery.isLoading || cohortsQuery.isLoading;
+  if (loadingState) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="relative">

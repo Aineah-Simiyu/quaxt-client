@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { assignmentService, userService } from '@/lib/api';
@@ -16,56 +17,44 @@ import {ROLES, isInstructorOrAdmin, isInstructor} from '@/lib/constants';
 
 export default function AssignmentsPage() {
 	const { user } = useAuth();
-	const [assignments, setAssignments] = useState([]);
-	const [submittedAssignments, setSubmittedAssignments] = useState([]);
-	const [loading, setLoading] = useState(true);
 	const [searchQuery, setSearchQuery] = useState('');
 	const [activeTab, setActiveTab] = useState('all');
 	const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
 	const { toast } = useToast();
-	
-	useEffect(() => {
-		const fetchData = async () => {
+
+	// Fetch assignments
+	const assignmentsQuery = useQuery({
+		queryKey: ['assignments', user?._id],
+		enabled: !!user,
+		queryFn: async () => {
 			try {
-				setLoading(true);
-				if (!user) {
-					setLoading(false);
-					return;
-				}
-				
-				// Fetch assignments
-				const assignmentsResponse = await assignmentService.getAssignments();
-				const assignmentsData = assignmentsResponse?.data?.data?.assignments?.docs || [];
-				setAssignments(assignmentsData);
-				
-				// Fetch current user's submitted assignments (only for students)
-				if (user?.role === 'student') {
-					try {
-						const userProfile = await userService.getCurrentProfile();
-						const userSubmittedAssignments = userProfile?.data?.user?.submittedAssignments || []; // Fixed path
-						setSubmittedAssignments(userSubmittedAssignments);
-					} catch (userError) {
-						console.error('User profile fetch error:', userError);
-						setSubmittedAssignments([]);
-					}
-				}
+				const res = await assignmentService.getAssignments();
+				return res?.data?.data?.assignments?.docs || res?.data?.data?.assignments || res?.data?.assignments || [];
 			} catch (error) {
 				toast({
-					variant: "destructive",
-					title: "Error",
-					description: "Failed to load assignments"
+					variant: 'destructive',
+					title: 'Error',
+					description: 'Failed to load assignments'
 				});
-				console.error('Assignments fetch error:', error);
-			} finally {
-				setLoading(false);
+				throw error;
 			}
-		};
-		
-		fetchData();
-	}, [user, toast]); // Added toast to dependencies
-	
+		},
+	});
+
+	// Fetch current user's submitted assignments (students only)
+	const submittedAssignmentsQuery = useQuery({
+		queryKey: ['me', 'submittedAssignments'],
+		enabled: !!user && user?.role === 'student',
+		queryFn: async () => {
+			const profile = await userService.getCurrentProfile();
+			// profile structure expected: { user: { submittedAssignments: [] } }
+			return profile?.user?.submittedAssignments || [];
+		},
+	});
+
 	// Use only real data from the API
-	const assignmentData = assignments;
+	const assignmentData = assignmentsQuery.data || [];
+	const submittedAssignments = submittedAssignmentsQuery.data || [];
 	
 	// Helper function to check if assignment is submitted (for students)
 	const isAssignmentSubmitted = (assignmentId) => {
@@ -172,6 +161,7 @@ export default function AssignmentsPage() {
 	
 	const statusCounts = getStatusCounts();
 	
+	const loading = assignmentsQuery.isLoading || submittedAssignmentsQuery.isLoading;
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-slate-50 flex items-center justify-center">
