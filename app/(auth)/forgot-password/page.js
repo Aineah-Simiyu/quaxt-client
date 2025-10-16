@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -18,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Mail, ArrowLeft, Shield, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { apiClient } from '@/lib/api';
+import { authService } from '@/lib/api';
 
 const formSchema = z.object({
 	email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -36,34 +37,24 @@ export default function ForgotPasswordPage() {
 		},
 	});
 
+	const mutation = useMutation({
+		mutationFn: ({ email }) => authService.forgotPassword(email),
+		onSuccess: () => {
+			setIsSuccess(true);
+			toast({ title: 'Reset email sent', description: 'Please check your email for password reset instructions.' });
+		},
+		onError: (error) => {
+			const message = error?.response?.data?.message || error?.message || 'Failed to send reset email. Please try again.';
+			toast({ title: 'Error', description: message, variant: 'destructive' });
+		},
+		onSettled: () => setIsLoading(false),
+	});
+
 	const onSubmit = async (values) => {
 		try {
 			setIsLoading(true);
-			
-			const response = await apiClient.post('/auth/forgot-password', {
-				email: values.email,
-			});
-
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || 'Failed to send reset email');
-			}
-
-			setIsSuccess(true);
-			toast({
-				title: "Reset email sent",
-				description: "Please check your email for password reset instructions."
-			});
-		} catch (error) {
-			console.error('Forgot password error:', error);
-			toast({
-				title: "Error",
-				description: error.message || "Failed to send reset email. Please try again.",
-				variant: "destructive"
-			});
-		} finally {
-			setIsLoading(false);
-		}
+			await mutation.mutateAsync({ email: values.email });
+		} catch (e) {}
 	};
 
 	return (
