@@ -124,6 +124,41 @@ export default function ProfilePage() {
     },
   });
 
+  // Mutations: profile, password, avatar
+  const updateProfileMutation = useMutation({
+    mutationFn: (data) => updateProfile(data),
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (data) => userService.changePassword(data),
+    onSuccess: () => {
+      toast({ title: "Success", description: "Password updated successfully" });
+      passwordForm.reset();
+    },
+    onError: (error) => {
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.errors?.[0]?.msg ||
+        "Failed to update password";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+    },
+  });
+
+  const updateAvatarMutation = useMutation({
+    mutationFn: (formData) => userService.updateAvatar(formData),
+    onSuccess: () => {
+      toast({ title: "Success", description: "Avatar updated successfully" });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (error) => {
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.errors?.[0]?.msg ||
+        "Failed to update avatar";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (user) {
       profileForm.reset({
@@ -368,18 +403,14 @@ export default function ProfilePage() {
   const onProfileSubmit = async (data) => {
     try {
       setLoading(true);
-      await updateProfile(data);
+      await updateProfileMutation.mutateAsync(data);
       toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error) {
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.errors?.[0]?.msg ||
+        error?.response?.data?.message ||
+        error?.response?.data?.errors?.[0]?.msg ||
         "Failed to update profile";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
       console.error("Profile update error:", error);
     } finally {
       setLoading(false);
@@ -389,19 +420,8 @@ export default function ProfilePage() {
   const onPasswordSubmit = async (data) => {
     try {
       setPasswordLoading(true);
-      await userService.changePassword(data);
-      toast({ title: "Success", description: "Password updated successfully" });
-      passwordForm.reset();
+      await changePasswordMutation.mutateAsync(data);
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.errors?.[0]?.msg ||
-        "Failed to update password";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
       console.error("Password update error:", error);
     } finally {
       setPasswordLoading(false);
@@ -425,18 +445,8 @@ export default function ProfilePage() {
       setLoading(true);
       const formData = new FormData();
       formData.append("avatar", file);
-      await userService.updateAvatar(formData);
-      toast({ title: "Success", description: "Avatar updated successfully" });
+      await updateAvatarMutation.mutateAsync(formData);
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.errors?.[0]?.msg ||
-        "Failed to update avatar";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
       console.error("Avatar update error:", error);
       setAvatarPreview(user?.avatar || "");
       setAvatarFile(null);
