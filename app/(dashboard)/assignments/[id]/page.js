@@ -704,7 +704,7 @@ export default function AssignmentDetailPage() {
                     <div className="space-y-4">
                       {submissions.map((sub) => (
                         <div key={sub._id} className="border border-slate-100 rounded-xl p-6 hover:bg-slate-50/50 transition-all duration-200">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between flex-wrap gap-4">
                             <div className="flex items-center space-x-4">
                               <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
                                 <AvatarImage src={sub.student?.avatar} />
@@ -736,7 +736,7 @@ export default function AssignmentDetailPage() {
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center space-x-3">
+                            <div className="flex items-center space-x-3 flex-wrap gap-4">
                               {sub.grade !== null && sub.grade.score !== undefined ? (
                                 <Badge className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 font-medium">
                                   {sub.grade.score}/{assignment.points} pts
