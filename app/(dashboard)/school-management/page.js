@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -14,10 +15,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, Mail, UserPlus, Users, School, Trash, Edit, Send } from 'lucide-react';
 import { ROLES, isAdmin } from '@/lib/constants';
 import { withAuth } from '@/middleware/withAuth';
+import { userService, cohortService, authService } from '@/lib/api';
 
 function SchoolManagementPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('school');
   const [loading, setLoading] = useState(false);
@@ -27,30 +30,62 @@ function SchoolManagementPage() {
   const [schoolEmail, setSchoolEmail] = useState('');
   const [schoolPhone, setSchoolPhone] = useState('');
   const [schoolAddress, setSchoolAddress] = useState('');
-  const [schools, setSchools] = useState([
-    { id: 1, name: 'Data Engineering Academy', email: 'info@dataacademy.edu', phone: '123-456-7890', address: '123 Data St, Analytics City' }
-  ]);
+  const [schools, setSchools] = useState([]);
   
   // Trainer state
   const [trainerName, setTrainerName] = useState('');
   const [trainerEmail, setTrainerEmail] = useState('');
-  const [trainers, setTrainers] = useState([
-    { id: 1, name: 'John Doe', email: 'john.doe@example.com', school: 'Data Engineering Academy', status: 'Active' }
-  ]);
+  const [trainers, setTrainers] = useState([]);
   
   // Cohort state
   const [cohortName, setCohortName] = useState('');
   const [cohortDescription, setCohortDescription] = useState('');
   const [cohortStartDate, setCohortStartDate] = useState('');
   const [cohortEndDate, setCohortEndDate] = useState('');
-  const [cohorts, setCohorts] = useState([
-    { id: 1, name: 'Data Engineering 2023', description: 'Fundamentals of Data Engineering', startDate: '2023-09-01', endDate: '2023-12-15', school: 'Data Engineering Academy', students: 24 }
-  ]);
+  const [cohorts, setCohorts] = useState([]);
   
   // Student invitation state
   const [invitationEmails, setInvitationEmails] = useState('');
   const [selectedCohort, setSelectedCohort] = useState('');
   const [invitationDialogOpen, setInvitationDialogOpen] = useState(false);
+
+  // Data queries
+  const trainersQuery = useQuery({
+    queryKey: ['school-management', 'trainers', user?.school],
+    enabled: !!user,
+    queryFn: async () => {
+      // Platform admin: fetch all trainers; school admin: trainers by school
+      if (user?.role === ROLES.ADMIN) {
+        return await userService.getUsers({ role: 'trainer' });
+      }
+      if (user?.school) {
+        return await userService.getUsersBySchoolAndRole(user.school, 'trainer');
+      }
+      return { data: [] };
+    },
+  });
+
+  const cohortsQuery = useQuery({
+    queryKey: ['school-management', 'cohorts', user?.school],
+    enabled: !!user,
+    queryFn: async () => {
+      if (user?.role === ROLES.ADMIN) return await cohortService.getCohorts();
+      if (user?.school) return await cohortService.getCohortsBySchool(user.school);
+      return { data: [] };
+    },
+  });
+
+  useEffect(() => {
+    const t = trainersQuery.data;
+    const list = t?.data || t || [];
+    if (Array.isArray(list)) setTrainers(list);
+  }, [trainersQuery.data]);
+
+  useEffect(() => {
+    const c = cohortsQuery.data;
+    const list = c?.data || c || [];
+    if (Array.isArray(list)) setCohorts(list);
+  }, [cohortsQuery.data]);
   
   // Check if user is admin
   useEffect(() => {
@@ -60,6 +95,31 @@ function SchoolManagementPage() {
   }, [user, router]);
   
   // Handle school registration
+  const registerSchoolMutation = useMutation({
+    mutationFn: (payload) => authService.registerSchool(payload),
+    onSuccess: (data) => {
+      const school = data?.school || data;
+      const newSchool = school || {
+        id: Math.random().toString(36).slice(2),
+        name: schoolName,
+        email: schoolEmail,
+        phone: schoolPhone,
+        address: schoolAddress,
+      };
+      setSchools((prev) => [...prev, newSchool]);
+      toast({ title: 'School registered', description: `${newSchool.name} has been successfully registered` });
+      setSchoolName('');
+      setSchoolEmail('');
+      setSchoolPhone('');
+      setSchoolAddress('');
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.message || 'Failed to register school';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
   const handleSchoolRegistration = () => {
     if (!schoolName || !schoolEmail) {
       toast({
@@ -71,35 +131,30 @@ function SchoolManagementPage() {
     }
     
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newSchool = {
-        id: schools.length + 1,
-        name: schoolName,
-        email: schoolEmail,
-        phone: schoolPhone,
-        address: schoolAddress
-      };
-      
-      setSchools([...schools, newSchool]);
-      
-      // Reset form
-      setSchoolName('');
-      setSchoolEmail('');
-      setSchoolPhone('');
-      setSchoolAddress('');
-      
-      toast({
-        title: 'School registered',
-        description: `${newSchool.name} has been successfully registered`,
-      });
-      
-      setLoading(false);
-    }, 1000);
+    registerSchoolMutation.mutate({
+      name: schoolName,
+      email: schoolEmail,
+      phone: schoolPhone,
+      address: schoolAddress,
+    });
   };
   
   // Handle trainer addition
+  const createTrainerMutation = useMutation({
+    mutationFn: (payload) => userService.createTrainer(payload),
+    onSuccess: () => {
+      toast({ title: 'Trainer invited', description: 'Invitation sent successfully' });
+      qc.invalidateQueries({ queryKey: ['school-management', 'trainers'] });
+      setTrainerName('');
+      setTrainerEmail('');
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.message || 'Failed to invite trainer';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
   const handleAddTrainer = () => {
     if (!trainerName || !trainerEmail) {
       toast({
@@ -111,33 +166,32 @@ function SchoolManagementPage() {
     }
     
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newTrainer = {
-        id: trainers.length + 1,
-        name: trainerName,
-        email: trainerEmail,
-        school: 'Data Engineering Academy',
-        status: 'Invited'
-      };
-      
-      setTrainers([...trainers, newTrainer]);
-      
-      // Reset form
-      setTrainerName('');
-      setTrainerEmail('');
-      
-      toast({
-        title: 'Trainer invited',
-        description: `Invitation sent to ${newTrainer.email}`,
-      });
-      
-      setLoading(false);
-    }, 1000);
+    createTrainerMutation.mutate({
+      name: trainerName,
+      email: trainerEmail,
+      ...(user?.school ? { school: user.school } : {}),
+      role: 'trainer',
+    });
   };
   
   // Handle cohort creation
+  const createCohortMutation = useMutation({
+    mutationFn: (payload) => cohortService.createCohort(payload),
+    onSuccess: () => {
+      toast({ title: 'Cohort created', description: 'Cohort has been successfully created' });
+      qc.invalidateQueries({ queryKey: ['school-management', 'cohorts'] });
+      setCohortName('');
+      setCohortDescription('');
+      setCohortStartDate('');
+      setCohortEndDate('');
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.message || 'Failed to create cohort';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
   const handleCreateCohort = () => {
     if (!cohortName || !cohortStartDate || !cohortEndDate) {
       toast({
@@ -149,37 +203,34 @@ function SchoolManagementPage() {
     }
     
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newCohort = {
-        id: cohorts.length + 1,
-        name: cohortName,
-        description: cohortDescription,
-        startDate: cohortStartDate,
-        endDate: cohortEndDate,
-        school: 'Data Engineering Academy',
-        students: 0
-      };
-      
-      setCohorts([...cohorts, newCohort]);
-      
-      // Reset form
-      setCohortName('');
-      setCohortDescription('');
-      setCohortStartDate('');
-      setCohortEndDate('');
-      
-      toast({
-        title: 'Cohort created',
-        description: `${newCohort.name} has been successfully created`,
-      });
-      
-      setLoading(false);
-    }, 1000);
+    createCohortMutation.mutate({
+      name: cohortName,
+      description: cohortDescription,
+      startDate: cohortStartDate,
+      endDate: cohortEndDate,
+      ...(user?.school ? { school: user.school } : {}),
+    });
   };
   
   // Handle student invitation
+  const inviteStudentsMutation = useMutation({
+    mutationFn: ({ cohortId, emails }) => cohortService.inviteStudentsToCohort(cohortId, emails),
+    onSuccess: (data, variables) => {
+      toast({
+        title: 'Invitations sent',
+        description: `${variables.emails.length} invitation(s) sent to students`,
+      });
+      setInvitationEmails('');
+      setSelectedCohort('');
+      setInvitationDialogOpen(false);
+    },
+    onError: (error) => {
+      const msg = error?.response?.data?.message || 'Failed to send invitations';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
   const handleInviteStudents = () => {
     if (!invitationEmails || !selectedCohort) {
       toast({
@@ -191,24 +242,11 @@ function SchoolManagementPage() {
     }
     
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const emails = invitationEmails.split(',').map(email => email.trim());
-      
-      toast({
-        title: 'Invitations sent',
-        description: `${emails.length} invitation(s) sent to students for ${selectedCohort}`,
-      });
-      
-      // Reset form
-      setInvitationEmails('');
-      setSelectedCohort('');
-      setInvitationDialogOpen(false);
-      
-      setLoading(false);
-    }, 1000);
+    const emails = invitationEmails.split(',').map(email => email.trim()).filter(Boolean);
+    inviteStudentsMutation.mutate({ cohortId: selectedCohort, emails });
   };
+
+  const selectedCohortName = cohorts.find((c) => String(c._id || c.id) === String(selectedCohort))?.name || '';
   
   return (
     <div className="space-y-6">
@@ -545,7 +583,7 @@ function SchoolManagementPage() {
                 >
                   <option value="">Select a cohort</option>
                   {cohorts.map((cohort) => (
-                    <option key={cohort.id} value={cohort.name}>{cohort.name}</option>
+                    <option key={cohort._id || cohort.id} value={cohort._id || cohort.id}>{cohort.name}</option>
                   ))}
                 </select>
               </div>
@@ -575,7 +613,7 @@ function SchoolManagementPage() {
       <Dialog open={invitationDialogOpen} onOpenChange={setInvitationDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite Students to {selectedCohort}</DialogTitle>
+            <DialogTitle>Invite Students to {selectedCohortName}</DialogTitle>
             <DialogDescription>
               Enter the email addresses of students you want to invite to this cohort.
             </DialogDescription>
