@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/context/AuthContext";
 import { NotifiqProvider } from "@/providers/notificationProvider";
+import ReactQueryProvider from "@/providers/react-query-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -69,23 +70,25 @@ export default function RootLayout({ children }) {
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           <Toaster />
-          {firebaseConfig ? (
-        <NotifiqProvider config={{ firebaseConfig, vapidKey,  enableAutoRefresh: true, autoGetToken : true, autoRequestPermission : true }}>
-          {children}
-        </NotifiqProvider>
-          ) : (
-            <div>
-              <div style={{
-                background: 'red',
-                color: 'white',
-                padding: '10px',
-                margin: '10px'
-              }}>
-                Firebase configuration error. Check console and environment variables.
+          <ReactQueryProvider>
+            {firebaseConfig ? (
+              <NotifiqProvider config={{ firebaseConfig, vapidKey,  enableAutoRefresh: true, autoGetToken : true, autoRequestPermission : true }}>
+                {children}
+              </NotifiqProvider>
+            ) : (
+              <div>
+                <div style={{
+                  background: 'red',
+                  color: 'white',
+                  padding: '10px',
+                  margin: '10px'
+                }}>
+                  Firebase configuration error. Check console and environment variables.
+                </div>
+                {children}
               </div>
-              {children}
-            </div>
-          )}
+            )}
+          </ReactQueryProvider>
         </AuthProvider>
       </body>
     </html>
