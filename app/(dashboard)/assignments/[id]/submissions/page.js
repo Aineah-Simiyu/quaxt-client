@@ -61,7 +61,7 @@ export default function SubmissionReviewPage() {
         setIsEditMode(first.status !== 'graded');
       }
     }
-  }, [submissionsQuery.data]);
+  }, [submissionsQuery.data, selectedSubmission]);
 
   useEffect(() => {
     setLoading(assignmentQuery.isLoading || submissionsQuery.isLoading);

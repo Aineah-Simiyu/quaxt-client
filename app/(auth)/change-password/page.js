@@ -166,7 +166,7 @@ const ChangePasswordPage = memo(function ChangePasswordPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [toast, logout, router, user, kycData, profileMutation, changePasswordMutation]);
+    }, [toast, logout, router, kycData, profileMutation, changePasswordMutation]);
 
 	const handleLogout = async () => {
 		try {

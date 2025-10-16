@@ -294,8 +294,8 @@ function TrainersPage() {
   };
 
   // Filter and search trainers
-  const trainers = trainersQuery.data || [];
-  const cohorts = cohortsQuery.data || [];
+  const trainers = useMemo(() => trainersQuery.data ?? [], [trainersQuery.data]);
+  const cohorts = useMemo(() => cohortsQuery.data ?? [], [cohortsQuery.data]);
   const loading = trainersQuery.isLoading || cohortsQuery.isLoading;
 
   const filteredTrainers = useMemo(() => {
