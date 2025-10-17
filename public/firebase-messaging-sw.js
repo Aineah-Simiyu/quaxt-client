@@ -6,12 +6,12 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-	measurementId: "G-FC6NTNW00W",
-  apiKey: "AIzaSyCBX1SypGgBg3IHeM1CFyuKxVp3NEAeZEw",
-  authDomain: "evalura-aac1f.firebaseapp.com",
-  projectId: "evalura-aac1f",
-  messagingSenderId: "835262431880",
-  appId: "1:835262431880:web:89929693e46680cd78153d"
+		measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+	  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+	  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+	  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+	  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+	  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
