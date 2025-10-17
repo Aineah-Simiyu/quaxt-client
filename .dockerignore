@@ -1,0 +1,15 @@
+node_modules
+.next
+.turbo
+.vercel
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+*.log
+.env*
+coverage
+dist
+tmp
+**/.DS_Store
