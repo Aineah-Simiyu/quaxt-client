@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/context/AuthContext";
 import { NotifiqProvider } from "@/providers/notificationProvider";
 import ReactQueryProvider from "@/providers/react-query-provider";
+import ThemeProvider from "@/providers/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,8 +67,9 @@ const validateEnvVars = () => {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ThemeProvider>
         <AuthProvider>
           <Toaster />
           <ReactQueryProvider>
@@ -90,6 +92,7 @@ export default function RootLayout({ children }) {
             )}
           </ReactQueryProvider>
         </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

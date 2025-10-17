@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Menu, User, LogOut } from 'lucide-react';
+import ThemeToggle from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -31,7 +32,7 @@ export default function Header({ onMenuClick }) {
   // While auth is initializing, show a loading placeholder
   if (loading) {
     return (
-        <header className="sticky top-0 z-50 bg-white border-b border-slate-200">
+        <header className="sticky top-0 z-50 bg-card border-b border-border">
           <div className="flex h-16 items-center justify-between px-6">
             <div className="flex items-center">
               <Button
@@ -54,7 +55,7 @@ export default function Header({ onMenuClick }) {
   }
   
   return (
-      <header className="sticky top-0 z-50 bg-white border-b border-slate-200">
+      <header className="sticky top-0 z-50 bg-card border-b border-border">
         <div className="flex h-16 items-center justify-between px-6">
           <div className="flex items-center">
             <Button
@@ -70,7 +71,8 @@ export default function Header({ onMenuClick }) {
             </h1>
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
             {user ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

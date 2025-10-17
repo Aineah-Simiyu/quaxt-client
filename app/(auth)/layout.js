@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import ThemeToggle from '@/components/ui/theme-toggle';
 import { useAuth } from '@/context/AuthContext';
 // import { useSocketAuth } from '@/hooks/useSocketAuth'; // Import the hook
 
@@ -32,8 +33,9 @@ export default function AuthLayout({ children }) {
 	
 	// Show loading state
 	if (loading) {
-		return (
-			<div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    return (
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+            <div className="fixed top-3 right-3 z-50"><ThemeToggle/></div>
 				<div className="text-center">
 					<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
 					<p className="mt-4 text-sm text-slate-600">Loading your session...</p>
@@ -45,8 +47,9 @@ export default function AuthLayout({ children }) {
 	// Don't render anything while redirecting
 	if (user && !(user.mustChangePassword && user.emailVerified &&
 		pathname.includes('/change-password'))) {
-		return (
-			<div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    return (
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+            <div className="fixed top-3 right-3 z-50"><ThemeToggle/></div>
 				<div className="text-center">
 					<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
 					<p className="mt-4 text-sm text-slate-600">Redirecting to dashboard...</p>
@@ -55,9 +58,10 @@ export default function AuthLayout({ children }) {
 		);
 	}
 	
-	return (
-		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-			{children}
-		</div>
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+            <div className="fixed top-3 right-3 z-50"><ThemeToggle/></div>
+            {children}
+        </div>
 	);
 }

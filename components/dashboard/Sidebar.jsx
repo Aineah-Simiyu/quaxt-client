@@ -126,19 +126,19 @@ export default function Sidebar({ onClose }) {
   
 
   return (
-    <div className="flex h-full w-64 flex-col bg-white border-r border-slate-200">
+    <div className="flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-border">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-6">
+      <div className="bg-sidebar border-b border-border px-6 py-6">
         <div className="flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center space-x-3">
-            <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center">
-              <RoleIcon className="h-4 w-4 text-white" />
+            <div className="h-8 w-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
+              <RoleIcon className="h-4 w-4 text-sidebar-primary-foreground" />
             </div>
             <div>
-              <span className="text-lg font-semibold text-slate-900">
+              <span className="text-lg font-semibold text-foreground">
                 Quaxt
               </span>
-              <p className="text-sm text-slate-600 font-medium">
+              <p className="text-sm text-muted-foreground font-medium">
                 {roleInfo.label}
               </p>
             </div>
@@ -147,7 +147,7 @@ export default function Sidebar({ onClose }) {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              className="md:hidden text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={onClose}
             >
               <X className="h-5 w-5" />
@@ -168,15 +168,15 @@ export default function Sidebar({ onClose }) {
                 href={item.href}
                 className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 ${
                   isActive
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 <item.icon
                   className={`mr-3 h-4 w-4 flex-shrink-0 ${
                     isActive
-                      ? "text-slate-700"
-                      : "text-slate-400 group-hover:text-slate-600"
+                      ? "text-foreground"
+                      : "text-muted-foreground group-hover:text-foreground"
                   }`}
                 />
                 <span>{item.name}</span>
@@ -187,10 +187,10 @@ export default function Sidebar({ onClose }) {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-border p-4">
         <Button
           variant="ghost"
-          className="w-full justify-start text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg py-2 px-3 transition-colors duration-150"
+          className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg py-2 px-3 transition-colors duration-150"
           onClick={logout}
         >
           <LogOut className="mr-3 h-4 w-4" />
