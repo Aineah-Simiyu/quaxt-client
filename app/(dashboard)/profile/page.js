@@ -172,10 +172,12 @@ export default function ProfilePage() {
 
   // React Query: WhatsApp sessions
   const sessionsQuery = useQuery({
-    queryKey: ["whatsappSessions", user?.school?._id || user?.school],
-    enabled: !!user && isSchoolAdmin(user) && !!user?.school,
+    queryKey: ["whatsappSessions", user?.schoolId || user?.school?._id || user?.school],
+    enabled: !!user && isSchoolAdmin(user) && !!(user?.schoolId || user?.school),
     queryFn: async () => whatsappService.getSessions(),
   });
+
+  const sessionsLoading = sessionsQuery.isLoading || sessionsQuery.isFetching;
 
   useEffect(() => {
     const resp = sessionsQuery.data;
