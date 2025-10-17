@@ -6,13 +6,12 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-	apiKey: "AIzaSyCBX1SypGgBg3IHeM1CFyuKxVp3NEAeZEw",
-	authDomain: "Quaxt-aac1f.firebaseapp.com",
-	projectId: "Quaxt-aac1f",
-	storageBucket: "Quaxt-aac1f.appspot.com",
-	messagingSenderId: "835262431880",
-	appId: "1:835262431880:web:89929693e46680cd78153d",
-	measurementId: "G-FC6NTNW00W"
+	measurementId: "G-FC6NTNW00W",
+  apiKey: "AIzaSyCBX1SypGgBg3IHeM1CFyuKxVp3NEAeZEw",
+  authDomain: "evalura-aac1f.firebaseapp.com",
+  projectId: "evalura-aac1f",
+  messagingSenderId: "835262431880",
+  appId: "1:835262431880:web:89929693e46680cd78153d"
 };
 
 // Initialize Firebase
@@ -23,7 +22,7 @@ const messaging = firebase.messaging();
 
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
-	console.log('Background message received:', payload);
+	
 	
 	const notificationTitle = payload.notification?.title || 'New Notification';
 	const notificationOptions = {
@@ -52,7 +51,7 @@ messaging.onBackgroundMessage((payload) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-	console.log('Notification clicked:', event);
+	
 	
 	event.notification.close();
 	
@@ -78,11 +77,11 @@ self.addEventListener('notificationclick', (event) => {
 	// Handle custom actions
 	if (event.action === 'dismiss') {
 		// Just close the notification (already done above)
-		console.log('Notification dismissed');
+		
 	}
 });
 
 // Handle notification close
 self.addEventListener('notificationclose', (event) => {
-	console.log('Notification closed:', event);
+	
 });

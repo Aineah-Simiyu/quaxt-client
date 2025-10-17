@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { analyticsService, cohortService, userService } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
@@ -36,76 +37,68 @@ export default function AnalyticsPage() {
 
   const isSchoolAdminUser = isSchoolAdmin(user);
 
-  useEffect(() => {
-    fetchInitialData();
-  }, [user]);
-
-  useEffect(() => {
-    if (cohorts.length > 0) {
-      fetchAnalyticsData();
-    }
-  }, [selectedCohort, selectedTimeRange, cohorts]);
-
-  const fetchInitialData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch cohorts based on user role
-      let cohortsData = [];
-      if (isSchoolAdminUser) {
-        cohortsData = await cohortService.getCohortsBySchool(user.school);
-      } else {
-        cohortsData = await cohortService.getCohortsByTrainer(user._id);
+  // Queries: cohorts list depending on role
+  const cohortsQuery = useQuery({
+    queryKey: ['analytics', 'cohorts', isSchoolAdminUser ? 'school' : 'trainer', isSchoolAdminUser ? user?.school : user?._id],
+    enabled: !!user,
+    queryFn: async () => {
+      try {
+        return isSchoolAdminUser
+          ? await cohortService.getCohortsBySchool(user.schoolId)
+          : await cohortService.getCohortsByTrainer(user._id);
+      } catch (error) {
+        toast({ title: 'Error', description: 'Failed to load cohorts', variant: 'destructive' });
+        throw error;
       }
-      
-      setCohorts(cohortsData.data || []);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load initial data',
-        variant: 'destructive'
-      });
-      console.error('Initial data fetch error:', error);
-    } finally {
-      setLoading(false);
     }
+  });
+
+  // Build filters for analytics
+  const buildFilters = () => {
+    const filters = {
+      startDate: getStartDate(),
+      endDate: new Date().toISOString().split('T')[0]
+    };
+    if (selectedCohort !== 'all') filters.cohortId = selectedCohort;
+    return filters;
   };
 
-  const fetchAnalyticsData = async () => {
-    try {
-      setRefreshing(true);
-      
-      const filters = {
-        startDate: getStartDate(),
-        endDate: new Date().toISOString().split('T')[0]
-      };
-
-      if (selectedCohort !== 'all') {
-        filters.cohortId = selectedCohort;
+  // Queries: analytics data depending on role and filters
+  const analyticsQuery = useQuery({
+    queryKey: ['analytics', isSchoolAdminUser ? 'school' : 'trainer', selectedCohort, selectedTimeRange, user?._id, user?.school],
+    enabled: !!user, // allow even if no cohorts
+    queryFn: async () => {
+      try {
+        const filters = buildFilters();
+        return isSchoolAdminUser
+          ? await analyticsService.getSchoolAnalytics(user.schoolId, filters)
+          : await analyticsService.getTrainerAnalytics(user._id, filters);
+      } catch (error) {
+        toast({ title: 'Error', description: 'Failed to load analytics data', variant: 'destructive' });
+        // Provide placeholder in case of error to avoid UI break
+        return getPlaceholderData();
       }
-
-      let data;
-      if (isSchoolAdminUser) {
-        data = await analyticsService.getSchoolAnalytics(user.school, filters);
-      } else {
-        data = await analyticsService.getTrainerAnalytics(user._id, filters);
-      }
-      
-      setAnalyticsData(data);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load analytics data',
-        variant: 'destructive'
-      });
-      console.error('Analytics data fetch error:', error);
-      
-      // Set placeholder data for development
-      setAnalyticsData(getPlaceholderData());
-    } finally {
-      setRefreshing(false);
     }
-  };
+  });
+
+  // Sync query data into local state
+  useEffect(() => {
+    const c = cohortsQuery.data;
+    if (Array.isArray(c)) setCohorts(c);
+    else if (c?.data) setCohorts(c.data);
+  }, [cohortsQuery.data]);
+
+  useEffect(() => {
+    if (analyticsQuery.data) setAnalyticsData(analyticsQuery.data);
+  }, [analyticsQuery.data]);
+
+  useEffect(() => {
+    setLoading(cohortsQuery.isLoading);
+  }, [cohortsQuery.isLoading]);
+
+  useEffect(() => {
+    setRefreshing(analyticsQuery.isFetching);
+  }, [analyticsQuery.isFetching]);
 
   const getStartDate = () => {
     const date = new Date();
@@ -136,7 +129,7 @@ export default function AnalyticsPage() {
   });
 
   const handleRefresh = () => {
-    fetchAnalyticsData();
+    analyticsQuery.refetch();
   };
 
   const handleExport = () => {

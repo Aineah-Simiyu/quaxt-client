@@ -17,7 +17,7 @@ export const storeFcmToken = (token) => {
 	try {
 		localStorage.setItem(FCM_TOKEN_KEY, token);
 		localStorage.setItem(FCM_TOKEN_TIMESTAMP_KEY, Date.now().toString());
-		console.log('FCM token stored successfully');
+		
 		return true;
 	} catch (error) {
 		console.error('Error storing FCM token:', error);
@@ -34,7 +34,7 @@ export const getStoredFcmToken = () => {
 		const timestamp = localStorage.getItem(FCM_TOKEN_TIMESTAMP_KEY);
 		
 		if (!token || !timestamp) {
-			console.log('No stored FCM token found');
+			
 			return null;
 		}
 		
@@ -43,12 +43,12 @@ export const getStoredFcmToken = () => {
 		const maxAge = TOKEN_EXPIRY_HOURS * 60 * 60 * 1000;
 		
 		if (tokenAge > maxAge) {
-			console.log('Stored FCM token expired, clearing');
+			
 			clearStoredFcmToken();
 			return null;
 		}
 		
-		console.log('Retrieved valid stored FCM token');
+		
 		return token;
 	} catch (error) {
 		console.error('Error retrieving stored FCM token:', error);
@@ -63,7 +63,7 @@ export const clearStoredFcmToken = () => {
 	try {
 		localStorage.removeItem(FCM_TOKEN_KEY);
 		localStorage.removeItem(FCM_TOKEN_TIMESTAMP_KEY);
-		console.log('FCM token cleared from storage');
+		
 		return true;
 	} catch (error) {
 		console.error('Error clearing FCM token:', error);

@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
 				// Check authentication
 				const response = await authService.getCurrentUser();
 				const userData = response.data?.user || response.data || response;
-				setUser(userData);
+				setUser({...userData, schoolId: userData.school?._id});
 				
 				// Only redirect for password change if we're not already on change-password page
 				if (userData.mustChangePassword && userData.emailVerified &&
@@ -71,7 +71,10 @@ export const AuthProvider = ({ children }) => {
 			setLoading(true);
 			const response = await authService.login(credentials);
 			const userData = response.data?.user || response.data || response;
-			setUser(userData);
+			
+			setUser(
+				{...userData, schoolId: userData.school?._id}
+			);
 			
 			// Show single success toast
 			toast({

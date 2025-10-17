@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+.sx-react-calendar-wrapper {
+  height: 700px;
+  width: 100%;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

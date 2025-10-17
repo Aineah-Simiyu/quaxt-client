@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import { userService, cohortService } from '@/lib/api';
 
 function CohortsPage() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [cohorts, setCohorts] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [students, setStudents] = useState([]);
@@ -35,91 +37,103 @@ function CohortsPage() {
     status: 'ACTIVE'
   });
 
-  // Fetch cohorts
-  const fetchCohorts = async () => {
-    try {
-      const response = await cohortService.getCohortsBySchool(user.school);
-      setCohorts(response.data || []);
-    } catch (error) {
-      console.error('Error fetching cohorts:', error);
-      toast.error('Failed to fetch cohorts');
-    }
-  };
+  // Queries
+  const cohortsQuery = useQuery({
+    queryKey: ['cohorts', user?.school],
+    enabled: !!user?.school,
+    queryFn: () => cohortService.getCohortsBySchool(user.schoolId),
+  });
 
-  // Fetch trainers
-  const fetchTrainers = async () => {
-    try {
-      const response = await userService.getUsersBySchoolAndRole(user.school, ROLES.TRAINER);
-      setTrainers(response.data || []);
-    } catch (error) {
-      console.error('Error fetching trainers:', error);
-    }
-  };
+  const trainersQuery = useQuery({
+    queryKey: ['users', 'school', user?.school, 'trainers'],
+    enabled: !!user?.school,
+    queryFn: () => userService.getUsersBySchoolAndRole(user.schoolId, ROLES.TRAINER),
+  });
 
-  // Fetch students
-  const fetchStudents = async () => {
-    try {
-      const response = await userService.getUsersBySchoolAndRole(user.school, ROLES.STUDENT);
-      setStudents(response.data || []);
-    } catch (error) {
-      console.error('Error fetching students:', error);
-    }
-  };
+  const studentsQuery = useQuery({
+    queryKey: ['users', 'school', user?.school, 'students'],
+    enabled: !!user?.school,
+    queryFn: () => userService.getUsersBySchoolAndRole(user.schoolId, ROLES.STUDENT),
+  });
+
+  // Sync query data into local state to minimize UI changes
+  useEffect(() => {
+    if (Array.isArray(cohortsQuery.data)) setCohorts(cohortsQuery.data);
+    else if (cohortsQuery.data?.data) setCohorts(cohortsQuery.data.data);
+  }, [cohortsQuery.data]);
 
   useEffect(() => {
-    if (user?.school) {
-      Promise.all([fetchCohorts(), fetchTrainers(), fetchStudents()]).finally(() => {
-        setLoading(false);
-      });
-    }
-  }, [user]);
+    if (Array.isArray(trainersQuery.data)) setTrainers(trainersQuery.data);
+    else if (trainersQuery.data?.data) setTrainers(trainersQuery.data.data);
+  }, [trainersQuery.data]);
+
+  useEffect(() => {
+    if (Array.isArray(studentsQuery.data)) setStudents(studentsQuery.data);
+    else if (studentsQuery.data?.data) setStudents(studentsQuery.data.data);
+  }, [studentsQuery.data]);
+
+  useEffect(() => {
+    const l = cohortsQuery.isLoading || trainersQuery.isLoading || studentsQuery.isLoading;
+    setLoading(!!l);
+  }, [cohortsQuery.isLoading, trainersQuery.isLoading, studentsQuery.isLoading]);
 
   // Handle create cohort
+  const createCohortMutation = useMutation({
+    mutationFn: (payload) => cohortService.createCohort(payload),
+    onSuccess: () => {
+      toast.success('Cohort created successfully');
+      qc.invalidateQueries({ queryKey: ['cohorts', user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to create cohort');
+    }
+  });
+
   const handleCreateCohort = async (e) => {
     e.preventDefault();
-    try {
-      await cohortService.createCohort({
-        ...cohortForm,
-        school: user.school
-      });
-      toast.success('Cohort created successfully');
-      setIsCreateDialogOpen(false);
-      setCohortForm({ name: '', description: '', startDate: '', endDate: '', status: 'ACTIVE' });
-      fetchCohorts();
-    } catch (error) {
-      console.error('Error creating cohort:', error);
-      toast.error(error.response?.data?.message || 'Failed to create cohort');
-    }
+    await createCohortMutation.mutateAsync({
+      ...cohortForm,
+      school: user.schoolId,
+    });
+    setIsCreateDialogOpen(false);
+    setCohortForm({ name: '', description: '', startDate: '', endDate: '', status: 'ACTIVE' });
   };
 
   // Handle update cohort
+  const updateCohortMutation = useMutation({
+    mutationFn: ({ id, payload }) => cohortService.updateCohort(id, payload),
+    onSuccess: () => {
+      toast.success('Cohort updated successfully');
+      qc.invalidateQueries({ queryKey: ['cohorts', user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to update cohort');
+    }
+  });
+
   const handleUpdateCohort = async (e) => {
     e.preventDefault();
-    try {
-      await cohortService.updateCohort(selectedCohort._id, cohortForm);
-      toast.success('Cohort updated successfully');
-      setIsEditDialogOpen(false);
-      setSelectedCohort(null);
-      setCohortForm({ name: '', description: '', startDate: '', endDate: '', status: 'ACTIVE' });
-      fetchCohorts();
-    } catch (error) {
-      console.error('Error updating cohort:', error);
-      toast.error(error.response?.data?.message || 'Failed to update cohort');
-    }
+    await updateCohortMutation.mutateAsync({ id: selectedCohort._id, payload: cohortForm });
+    setIsEditDialogOpen(false);
+    setSelectedCohort(null);
+    setCohortForm({ name: '', description: '', startDate: '', endDate: '', status: 'ACTIVE' });
   };
 
   // Handle delete cohort
+  const deleteCohortMutation = useMutation({
+    mutationFn: (id) => cohortService.deleteCohort(id),
+    onSuccess: () => {
+      toast.success('Cohort deleted successfully');
+      qc.invalidateQueries({ queryKey: ['cohorts', user?.school] });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to delete cohort');
+    }
+  });
+
   const handleDeleteCohort = async (cohortId) => {
     if (!confirm('Are you sure you want to delete this cohort?')) return;
-
-    try {
-      await cohortService.deleteCohort(cohortId);
-      toast.success('Cohort deleted successfully');
-      fetchCohorts();
-    } catch (error) {
-      console.error('Error deleting cohort:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete cohort');
-    }
+    await deleteCohortMutation.mutateAsync(cohortId);
   };
 
   // Handle edit cohort
@@ -130,7 +144,7 @@ function CohortsPage() {
       description: cohort.description || '',
       startDate: cohort.startDate ? new Date(cohort.startDate).toISOString().split('T')[0] : '',
       endDate: cohort.endDate ? new Date(cohort.endDate).toISOString().split('T')[0] : '',
-      status: cohort.status
+      status: cohort.isActive ? "Active" : "False"
     });
     setIsEditDialogOpen(true);
   };
@@ -230,7 +244,7 @@ function CohortsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status" className="text-sm font-medium">Status</Label>
-                <Select value={cohortForm.status} onValueChange={(value) => setCohortForm({ ...cohortForm, status: value })}>
+                <Select value={cohortForm.isActive} onValueChange={(value) => setCohortForm({ ...cohortForm, status: value })}>
                   <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
@@ -351,7 +365,7 @@ function CohortsPage() {
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>Created {new Date(cohort.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    <span className="font-medium">View Details →</span>
+                    <span onClick={() => handleEditCohort(cohort)} className="font-medium">View Details →</span>
                   </div>
                 </CardContent>
               </Card>

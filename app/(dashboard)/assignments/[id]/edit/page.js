@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,7 +33,7 @@ export default function EditAssignmentPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const qc = useQueryClient();
   const [resources, setResources] = useState([{ name: '', url: '' }]);
   const { toast } = useToast();
 
@@ -92,88 +93,67 @@ export default function EditAssignmentPage() {
     }
   }, [user, router, isInstructorOrAdminRole]);
 
-  // Fetch assignment data and populate form
-  useEffect(() => {
-    const fetchAssignment = async () => {
-      try {
-        setInitialLoading(true);
-        const assignment = await assignmentService.getAssignment(id);
-        
-        // Format date for input field
-        const formattedDate = assignment.dueDate 
-          ? new Date(assignment.dueDate).toISOString().split('T')[0]
-          : '';
-        
-        // Populate form with assignment data
-        form.reset({
-          title: assignment.title || '',
-          description: assignment.description || '',
-          instructions: assignment.instructions || '',
-          dueDate: formattedDate,
-          points: assignment.points || 100,
-          course: assignment.course || '',
-        });
-        
-        // Set resources if they exist
-        if (assignment.resources && assignment.resources.length > 0) {
-          setResources(assignment.resources);
-        }
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load assignment data"
-        });
-        console.error('Assignment fetch error:', error);
-      } finally {
-        setInitialLoading(false);
-      }
-    };
+  // Fetch assignment data and populate form (React Query)
+  const assignmentQuery = useQuery({
+    queryKey: ['assignment', id],
+    enabled: !!id && !!user && isInstructorOrAdminRole,
+    queryFn: () => assignmentService.getAssignment(id),
+  });
 
-    if (id && user && isInstructorOrAdminRole) {
-      fetchAssignment();
+  useEffect(() => {
+    const assignment = assignmentQuery.data;
+    if (!assignment) return;
+    const formattedDate = assignment.dueDate
+      ? new Date(assignment.dueDate).toISOString().split('T')[0]
+      : '';
+    form.reset({
+      title: assignment.title || '',
+      description: assignment.description || '',
+      instructions: assignment.instructions || '',
+      dueDate: formattedDate,
+      points: assignment.points || 100,
+      course: assignment.course || '',
+    });
+    if (assignment.resources && assignment.resources.length > 0) {
+      setResources(assignment.resources);
     }
-  }, [id, user, form, toast, isInstructorOrAdminRole]);
+  }, [assignmentQuery.data, form]);
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }) => assignmentService.updateAssignment(id, payload),
+    onSuccess: () => {
+      toast({ title: 'Assignment updated', description: 'Your assignment has been updated successfully.' });
+      qc.invalidateQueries({ queryKey: ['assignments'] });
+      qc.invalidateQueries({ queryKey: ['assignment', id] });
+      router.push(`/assignments/${id}`);
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Failed to update assignment';
+      toast({ title: 'Update failed', description: message, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
+  const onSubmit = async (data) => {
+    try {
+      setLoading(true);
+      const payload = {
+        title: data.title,
+        description: data.description,
+        instructions: data.instructions,
+        dueDate: new Date(data.dueDate).toISOString(),
+        points: Number(data.points),
+      };
+      await updateMutation.mutateAsync({ id, payload });
+    } catch (e) {
+      // handled in mutation onError
+    }
+  };
 
   // Early return if user doesn't have permission
   if (user && !isInstructorOrAdminRole) {
     return null;
   }
-
-  const onSubmit = async (data) => {
-    try {
-      setLoading(true);
-      
-      // Prepare payload for backend (only include supported fields)
-      const payload = {
-        title: data.title,
-        description: data.description,
-        instructions: data.instructions,
-        // Convert date to ISO8601 string to match backend expectations
-        dueDate: new Date(data.dueDate).toISOString(),
-        points: Number(data.points),
-      };
-
-      // Update assignment via API
-      await assignmentService.updateAssignment(id, payload);
-
-      toast({
-        title: 'Assignment updated',
-        description: 'Your assignment has been updated successfully.',
-      });
-      router.push(`/assignments/${id}`);
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Failed to update assignment';
-      toast({
-        title: 'Update failed',
-        description: message,
-        variant: 'destructive',
-      });
-      console.error('Assignment update error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Handle resource fields
   const addResource = () => {
@@ -192,7 +172,7 @@ export default function EditAssignmentPage() {
     setResources(newResources);
   };
 
-  if (initialLoading) {
+  if (assignmentQuery.isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="relative h-12 w-12">

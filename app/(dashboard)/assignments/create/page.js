@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,6 +35,7 @@ export default function CreateAssignmentPage() {
   const [resources, setResources] = useState([{ name: '', url: '' }]);
   const [cohorts, setCohorts] = useState([]);
   const [loadingCohorts, setLoadingCohorts] = useState(true);
+  const qc = useQueryClient();
   const { toast } = useToast();
 
   const form = useForm({
@@ -49,80 +51,75 @@ export default function CreateAssignmentPage() {
     },
   });
 
-  // Check if user is instructor or admin and fetch cohorts
+  // Check access
   useEffect(() => {
     if (user && !isInstructorOrAdmin(user)) {
       router.push('/dashboard');
-      return;
     }
+  }, [user, router]);
 
-    const fetchCohorts = async () => {
-      if (!user?._id) return;
-      
-      try {
-        setLoadingCohorts(true);
-        const response = await cohortService.getCohortsByTrainer(user._id);
-        const cohortsData = response?.data || [];
-        setCohorts(cohortsData);
-        
-        // Pre-select all trainer's cohorts
-        const cohortIds = cohortsData.map(cohort => cohort._id);
-        form.setValue('cohorts', cohortIds);
-      } catch (error) {
-        console.error('Error fetching cohorts:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load cohorts"
-        });
-      } finally {
-        setLoadingCohorts(false);
+  // Fetch cohorts via React Query (role-based)
+  const cohortsQuery = useQuery({
+    queryKey: ['assignment-create', 'cohorts', user?._id, user?.role, user?.school],
+    enabled: !!user,
+    queryFn: async () => {
+      if (user?.role === ROLES.SCHOOL_ADMIN && user?.school) {
+        return await cohortService.getCohortsBySchool(user.schoolId);
       }
-    };
+      if (user?._id) {
+        return await cohortService.getCohortsByTrainer(user._id);
+      }
+      return { data: [] };
+    },
+  });
 
-    fetchCohorts();
-  }, [user, router, form, toast]);
+  useEffect(() => {
+    const resp = cohortsQuery.data;
+    const list = resp?.data || resp || [];
+    if (Array.isArray(list)) {
+      setCohorts(list);
+      // Pre-select all cohorts
+      const cohortIds = list.map((c) => c._id || c.id).filter(Boolean);
+      form.setValue('cohorts', cohortIds);
+    }
+    setLoadingCohorts(cohortsQuery.isLoading);
+  }, [cohortsQuery.data, cohortsQuery.isLoading, form]);
+
+  const createMutation = useMutation({
+    mutationFn: (payload) => assignmentService.createAssignment(payload),
+    onSuccess: () => {
+      toast({ title: 'Project created', description: 'Your project has been created successfully.' });
+      qc.invalidateQueries({ queryKey: ['assignments'] });
+      router.push('/assignments');
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Failed to create project';
+      toast({ title: 'Creation failed', description: message, variant: 'destructive' });
+    },
+    onSettled: () => setLoading(false),
+  });
+
+  const onSubmit = async (data) => {
+    try {
+      setLoading(true);
+      const payload = {
+        title: data.title,
+        description: data.description,
+        instructions: data.instructions,
+        dueDate: new Date(data.dueDate).toISOString(),
+        points: Number(data.points),
+        cohorts: data.cohorts,
+      };
+      await createMutation.mutateAsync(payload);
+    } catch (e) {
+      // handled by mutation onError
+    }
+  };
 
   // Early return if user doesn't have permission
   if (user && !isInstructorOrAdmin(user)) {
     return null;
   }
-
-  const onSubmit = async (data) => {
-    try {
-      setLoading(true);
-      
-      // Prepare payload for backend (only include supported fields)
-      const payload = {
-        title: data.title,
-        description: data.description,
-        instructions: data.instructions,
-        // Convert date to ISO8601 string to match backend expectations
-        dueDate: new Date(data.dueDate).toISOString(),
-        points: Number(data.points),
-        cohorts: data.cohorts,
-      };
-
-      // Create assignment via API
-      await assignmentService.createAssignment(payload);
-
-      toast({
-        title: 'Project created',
-        description: 'Your project has been created successfully.',
-      });
-      router.push('/assignments');
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Failed to create project';
-      toast({
-        title: 'Creation failed',
-        description: message,
-        variant: 'destructive',
-      });
-      console.error('Assignment creation error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Handle resource fields
   const addResource = () => {

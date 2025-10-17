@@ -16,7 +16,7 @@ export function useSocketAuth() {
 	// Manual authentication function that uses the context's method
 	const authenticateSocket = useCallback(async (userData = null) => {
 		if (!reAuthenticateSocket) {
-			console.log('Re-authentication method not available');
+			
 			return false;
 		}
 		

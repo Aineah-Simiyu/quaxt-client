@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,29 +14,36 @@ export default function VerifyEmailPage() {
   const [status, setStatus] = useState('verifying'); // 'verifying', 'success', 'error'
   const [message, setMessage] = useState('');
 
+  const verifyQuery = useQuery({
+    queryKey: ['verify-email', token],
+    enabled: !!token,
+    queryFn: () => authService.verifyEmail(token),
+  });
+
   useEffect(() => {
-    const verifyEmail = async () => {
-      if (!token) {
-        setStatus('error');
-        setMessage('Invalid verification link. No token provided.');
-        return;
-      }
-
-      try {
-        const response = await authService.verifyEmail(token);
-        setStatus('success');
-        setMessage(response.message || 'Your email has been successfully verified!');
-      } catch (error) {
-        setStatus('error');
-        setMessage(
-          error.response?.data?.message || 
-          'Verification failed. The link may be expired or invalid.'
-        );
-      }
-    };
-
-    verifyEmail();
-  }, [token]);
+    if (!token) {
+      setStatus('error');
+      setMessage('Invalid verification link. No token provided.');
+      return;
+    }
+    if (verifyQuery.isLoading) {
+      setStatus('verifying');
+      setMessage('');
+      return;
+    }
+    if (verifyQuery.isError) {
+      const err = verifyQuery.error;
+      const msg = err?.response?.data?.message || 'Verification failed. The link may be expired or invalid.';
+      setStatus('error');
+      setMessage(msg);
+      return;
+    }
+    if (verifyQuery.data) {
+      const resp = verifyQuery.data;
+      setStatus('success');
+      setMessage(resp?.message || 'Your email has been successfully verified!');
+    }
+  }, [token, verifyQuery.isLoading, verifyQuery.isError, verifyQuery.data, verifyQuery.error]);
 
   const handleContinue = () => {
     router.push('/login');
